@@ -169,7 +169,8 @@ func unmarshalEnvelope(frame []byte) (envelopeMetadata, []byte, error) {
 		return envelopeMetadata{}, nil, errors.New("truncated header")
 	}
 	headerEnd := 8 + int(headerLength)
-	decoder := json.NewDecoder(bytes.NewReader(frame[8:headerEnd]))
+	header := frame[8:headerEnd]
+	decoder := json.NewDecoder(bytes.NewReader(header))
 	decoder.DisallowUnknownFields()
 	var metadata envelopeMetadata
 	if err := decoder.Decode(&metadata); err != nil {
@@ -177,6 +178,13 @@ func unmarshalEnvelope(frame []byte) (envelopeMetadata, []byte, error) {
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
 		return envelopeMetadata{}, nil, err
+	}
+	canonical, err := json.Marshal(metadata)
+	if err != nil {
+		return envelopeMetadata{}, nil, err
+	}
+	if !bytes.Equal(header, canonical) {
+		return envelopeMetadata{}, nil, errors.New("non-canonical metadata")
 	}
 	return metadata, bytes.Clone(frame[headerEnd:]), nil
 }
