@@ -96,6 +96,9 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 			returnErr = errors.Join(returnErr, fmt.Errorf("cas: release lease: %w", err))
 		}
 	}()
+	if _, err := lease.Renew(ctx, leaseTTL); err != nil {
+		return Digest{}, objectstore.Object{}, err
+	}
 	fillCtx, stopFill := context.WithCancelCause(ctx)
 	keepAlive, err := coordination.KeepAlive(fillCtx, lease, leaseTTL)
 	if err != nil {
@@ -167,11 +170,6 @@ func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectst
 	}
 	store.cache(ctx, digest, object)
 	if byteRange != nil {
-		if object.SHA256 != [32]byte(digest) {
-			_ = body.Close()
-			store.invalidate(ctx, digest)
-			return nil, objectstore.Object{}, ErrDigestMismatch
-		}
 		return body, object.Clone(), nil
 	}
 	verified := &verifyingReadCloser{
