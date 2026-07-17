@@ -3,7 +3,9 @@ package objectstore_test
 import (
 	"errors"
 	"math"
+	"reflect"
 	"testing"
+	"time"
 
 	objectstore "github.com/justusschock/go-object-storage"
 )
@@ -76,20 +78,47 @@ func TestContractClonesOwnMutableFields(t *testing.T) {
 	t.Parallel()
 
 	digest := [32]byte{1}
-	object := objectstore.Object{Metadata: map[string]string{"object": "original"}}
-	put := objectstore.PutOptions{
-		Metadata: map[string]string{"put": "original"},
-		SHA256:   &digest,
+	modifiedAt := time.Date(2026, time.July, 17, 9, 30, 0, 0, time.UTC)
+	object := objectstore.Object{
+		Bucket:     "objects",
+		Key:        "path/value",
+		Version:    "version-1",
+		ETag:       "etag-1",
+		Size:       17,
+		ModifiedAt: modifiedAt,
+		SHA256:     digest,
+		Metadata:   map[string]string{"object": "original"},
 	}
-	get := objectstore.GetOptions{Range: &objectstore.ByteRange{Offset: 1, Length: 2}}
-	upload := objectstore.Upload{Options: put}
-	page := objectstore.Page{Objects: []objectstore.Object{object}}
+	put := objectstore.PutOptions{
+		ContentType:    "application/octet-stream",
+		Metadata:       map[string]string{"put": "original"},
+		IfAbsent:       true,
+		IfMatchVersion: "version-0",
+		SHA256:         &digest,
+	}
+	get := objectstore.GetOptions{
+		Range:          &objectstore.ByteRange{Offset: 1, Length: 2},
+		IfMatchVersion: "version-1",
+	}
+	upload := objectstore.Upload{ID: "upload-1", Bucket: object.Bucket, Key: object.Key, Options: put}
+	page := objectstore.Page{Objects: []objectstore.Object{object}, NextAfter: "path/value"}
 
 	objectClone := object.Clone()
 	putClone := put.Clone()
 	getClone := get.Clone()
 	uploadClone := upload.Clone()
 	pageClone := page.Clone()
+	for name, values := range map[string][2]any{
+		"object": {objectClone, object},
+		"put":    {putClone, put},
+		"get":    {getClone, get},
+		"upload": {uploadClone, upload},
+		"page":   {pageClone, page},
+	} {
+		if !reflect.DeepEqual(values[0], values[1]) {
+			t.Fatalf("%s clone = %#v, want value-preserving %#v", name, values[0], values[1])
+		}
+	}
 
 	objectClone.Metadata["object"] = "clone"
 	putClone.Metadata["put"] = "clone"
