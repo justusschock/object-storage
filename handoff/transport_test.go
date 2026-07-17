@@ -121,6 +121,30 @@ func TestTransportSendIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestTransportRejectsNonUTF8ArtifactFields(t *testing.T) {
+	invalid := string([]byte{0xff})
+	for _, fields := range []struct {
+		mediaType string
+		metadata  map[string]string
+	}{
+		{mediaType: invalid, metadata: nil},
+		{mediaType: "application/test", metadata: map[string]string{invalid: "value"}},
+		{mediaType: "application/test", metadata: map[string]string{"key": invalid}},
+	} {
+		artifact, err := lifecyclehandoff.NewArtifact(fields.mediaType, 1, []byte("ok"), fields.metadata)
+		if err != nil {
+			t.Fatal(err)
+		}
+		transport, err := NewTransport(memory.New(), "handoffs", "artifacts")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := transport.Send(context.Background(), artifact); err == nil {
+			t.Fatalf("Send accepted invalid UTF-8 fields: %#v", fields)
+		}
+	}
+}
+
 func TestEnvelopeRejectsNonCanonicalAndDuplicateJSON(t *testing.T) {
 	artifact, err := lifecyclehandoff.NewArtifact("application/test", 1, []byte("ok"), map[string]string{"key": "value"})
 	if err != nil {
