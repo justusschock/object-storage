@@ -13,7 +13,10 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
-const minimumPartSize = int64(5 << 20)
+const (
+	minimumPartSize  = int64(5 << 20)
+	maximumPartCount = int64(10_000)
+)
 
 // Options controls multipart sizing and fan-out.
 type Options struct {
@@ -63,6 +66,17 @@ func (uploader *Uploader) UploadReaderAt(ctx context.Context, bucket objectstore
 	if size < 0 {
 		return objectstore.Object{}, errors.New("multipart: negative size")
 	}
+	partCount64 := size / uploader.partSize
+	if size%uploader.partSize != 0 {
+		partCount64++
+	}
+	if partCount64 == 0 {
+		partCount64 = 1
+	}
+	if partCount64 > maximumPartCount {
+		return objectstore.Object{}, fmt.Errorf("multipart: part count exceeds %d", maximumPartCount)
+	}
+	partCount := int(partCount64)
 
 	upload, err := uploader.store.BeginMultipart(ctx, bucket, key, options.Clone())
 	if err != nil {
@@ -76,10 +90,6 @@ func (uploader *Uploader) UploadReaderAt(ctx context.Context, bucket objectstore
 		return primary
 	}
 
-	partCount := int((size + uploader.partSize - 1) / uploader.partSize)
-	if partCount == 0 {
-		partCount = 1
-	}
 	parts := make([]section, partCount)
 	for index := range parts {
 		offset := int64(index) * uploader.partSize
