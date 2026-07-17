@@ -10,7 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	coordination "github.com/justusschock/go-distributed-coordination"
 	coordinationmemory "github.com/justusschock/go-distributed-coordination/memory"
 	objectstore "github.com/justusschock/go-object-storage"
 	"github.com/justusschock/go-object-storage/backend/memory"
@@ -26,6 +28,9 @@ func TestDigestRoundTrip(t *testing.T) {
 		if _, err := ParseDigest(value); err == nil {
 			t.Fatalf("ParseDigest(%q) returned nil error", value)
 		}
+	}
+	if _, err := ParseDigest("sha256:" + strings.ToUpper(digest.hex())); err == nil {
+		t.Fatal("ParseDigest accepted non-canonical uppercase hex")
 	}
 }
 
@@ -70,13 +75,15 @@ func TestPutDeduplicatesConcurrentWriters(t *testing.T) {
 }
 
 func TestOpenFullReadDetectsCorruptionAtEOF(t *testing.T) {
-	objects := memory.New()
+	underlying := memory.New()
+	objects := &digestMetadataStore{Store: underlying}
 	store, err := New(objects, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	digest := Digest(sha256.Sum256([]byte("expected")))
-	if _, err := objects.Put(context.Background(), "blobs", objectstore.Key("sha256/"+digest.hex()), strings.NewReader("corrupt"), objectstore.PutOptions{}); err != nil {
+	objects.digest = [32]byte(digest)
+	if _, err := underlying.Put(context.Background(), "blobs", objectstore.Key("sha256/"+digest.hex()), strings.NewReader("corrupt"), objectstore.PutOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	body, _, err := store.Open(context.Background(), digest, nil)
@@ -87,6 +94,51 @@ func TestOpenFullReadDetectsCorruptionAtEOF(t *testing.T) {
 	closeErr := body.Close()
 	if string(data) != "corrupt" || !errors.Is(errors.Join(readErr, closeErr), ErrDigestMismatch) {
 		t.Fatalf("read = (%q, %v), close = %v", data, readErr, closeErr)
+	}
+}
+
+func TestOpenRejectsCorruptFullReadMetadata(t *testing.T) {
+	underlying := memory.New()
+	digest := Digest(sha256.Sum256([]byte("expected")))
+	if _, err := underlying.Put(context.Background(), "blobs", objectstore.Key("sha256/"+digest.hex()), strings.NewReader("expected"), objectstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	objects := &digestMetadataStore{Store: underlying, digest: sha256.Sum256([]byte("wrong"))}
+	store, err := New(objects, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _, err := store.Open(context.Background(), digest, nil); body != nil || !errors.Is(err, ErrDigestMismatch) {
+		t.Fatalf("Open = (%#v, %v), want nil ErrDigestMismatch", body, err)
+	}
+}
+
+func TestPutReportsLeaseLoss(t *testing.T) {
+	store, err := New(memory.New(), "blobs", "sha256", nil, losingBackend{}, "writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.Put(context.Background(), strings.NewReader("hello")); !errors.Is(err, coordination.ErrLeaseLost) {
+		t.Fatalf("Put error = %v, want ErrLeaseLost", err)
+	}
+}
+
+func TestNewAndPutRejectTypedNilInputs(t *testing.T) {
+	var objects *nilObjectStore
+	if _, err := New(objects, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer"); err == nil {
+		t.Fatal("New accepted typed-nil object store")
+	}
+	var backend *nilCoordinationBackend
+	if _, err := New(memory.New(), "blobs", "sha256", nil, backend, "writer"); err == nil {
+		t.Fatal("New accepted typed-nil coordination backend")
+	}
+	store, err := New(memory.New(), "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reader *bytes.Reader
+	if _, _, err := store.Put(context.Background(), reader); err == nil {
+		t.Fatal("Put accepted typed-nil reader")
 	}
 }
 
@@ -120,3 +172,40 @@ func (store *countingStore) Put(ctx context.Context, bucket objectstore.Bucket, 
 	store.putCalls.Add(1)
 	return store.Store.Put(ctx, bucket, key, body, options)
 }
+
+type digestMetadataStore struct {
+	*memory.Store
+	digest [32]byte
+}
+
+func (store *digestMetadataStore) Get(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.GetOptions) (io.ReadCloser, objectstore.Object, error) {
+	body, object, err := store.Store.Get(ctx, bucket, key, options)
+	if err == nil {
+		object.SHA256 = store.digest
+	}
+	return body, object, err
+}
+
+type nilObjectStore struct{ objectstore.Store }
+
+type nilCoordinationBackend struct{ coordination.Backend }
+
+type losingBackend struct{}
+
+func (losingBackend) Acquire(context.Context, coordination.AcquireRequest) (coordination.Lease, error) {
+	return losingLease{done: make(chan struct{})}, nil
+}
+
+type losingLease struct{ done chan struct{} }
+
+func (lease losingLease) Info() coordination.LeaseInfo {
+	return coordination.LeaseInfo{Key: "key", Owner: "writer", Token: 1, AcquiredAt: time.Now(), ExpiresAt: time.Now().Add(time.Minute)}
+}
+
+func (lease losingLease) Done() <-chan struct{} { return lease.done }
+
+func (lease losingLease) Renew(context.Context, time.Duration) (coordination.LeaseInfo, error) {
+	return lease.Info(), coordination.ErrLeaseLost
+}
+
+func (losingLease) Release(context.Context) error { return coordination.ErrLeaseLost }
