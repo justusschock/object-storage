@@ -1,0 +1,261 @@
+package cas
+
+import (
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"hash"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	cache "github.com/justusschock/go-cache"
+	coordination "github.com/justusschock/go-distributed-coordination"
+	objectstore "github.com/justusschock/go-object-storage"
+)
+
+const leaseTTL = time.Minute
+
+// Store keeps immutable SHA-256-addressed objects.
+type Store struct {
+	objects      objectstore.Store
+	bucket       objectstore.Bucket
+	prefix       string
+	metadata     cache.Cache[string, objectstore.Object]
+	coordination coordination.Backend
+	owner        string
+}
+
+// New constructs a content-addressed store.
+func New(objects objectstore.Store, bucket objectstore.Bucket, prefix string, metadata cache.Cache[string, objectstore.Object], backend coordination.Backend, owner string) (*Store, error) {
+	if objects == nil {
+		return nil, errors.New("cas: nil object store")
+	}
+	if backend == nil {
+		return nil, errors.New("cas: nil coordination backend")
+	}
+	if err := objectstore.ValidateBucket(bucket); err != nil {
+		return nil, err
+	}
+	if err := objectstore.ValidateKey(objectstore.Key(prefix + "/digest")); err != nil || strings.HasSuffix(prefix, "/") {
+		return nil, fmt.Errorf("cas: invalid prefix %q", prefix)
+	}
+	if owner == "" {
+		return nil, errors.New("cas: empty owner")
+	}
+	return &Store{objects: objects, bucket: bucket, prefix: prefix, metadata: metadata, coordination: backend, owner: owner}, nil
+}
+
+// Put streams content through an owner-only temporary file and stores it once.
+func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, object objectstore.Object, returnErr error) {
+	if err := ctx.Err(); err != nil {
+		return Digest{}, objectstore.Object{}, err
+	}
+	if reader == nil {
+		return Digest{}, objectstore.Object{}, errors.New("cas: nil reader")
+	}
+	temporary, err := os.CreateTemp("", "go-object-storage-cas-*")
+	if err != nil {
+		return Digest{}, objectstore.Object{}, fmt.Errorf("cas: create temporary file: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	defer func() {
+		returnErr = errors.Join(returnErr, temporary.Close())
+	}()
+
+	hasher := sha256.New()
+	if _, err := copyContext(ctx, io.MultiWriter(temporary, hasher), reader); err != nil {
+		return Digest{}, objectstore.Object{}, err
+	}
+	copy(digest[:], hasher.Sum(nil))
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		return Digest{}, objectstore.Object{}, fmt.Errorf("cas: rewind temporary file: %w", err)
+	}
+
+	lease, err := store.coordination.Acquire(ctx, coordination.AcquireRequest{
+		Key:   "object-storage/cas/" + digest.String(),
+		Owner: store.owner,
+		TTL:   leaseTTL,
+		Wait:  true,
+	})
+	if err != nil {
+		return Digest{}, objectstore.Object{}, err
+	}
+	defer func() {
+		if err := lease.Release(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, coordination.ErrLeaseLost) {
+			returnErr = errors.Join(returnErr, fmt.Errorf("cas: release lease: %w", err))
+		}
+	}()
+
+	key := store.key(digest)
+	existing, err := store.objects.Stat(ctx, store.bucket, key)
+	if err == nil {
+		if existing.SHA256 != [32]byte(digest) {
+			store.invalidate(ctx, digest)
+			return Digest{}, objectstore.Object{}, ErrDigestMismatch
+		}
+		store.cache(ctx, digest, existing)
+		return digest, existing.Clone(), nil
+	}
+	if !errors.Is(err, objectstore.ErrNotFound) {
+		return Digest{}, objectstore.Object{}, err
+	}
+
+	sum := [32]byte(digest)
+	object, err = store.objects.Put(ctx, store.bucket, key, temporary, objectstore.PutOptions{
+		IfAbsent: true,
+		SHA256:   &sum,
+		Metadata: map[string]string{"object-storage-fencing-token": strconv.FormatUint(uint64(lease.Info().Token), 10)},
+	})
+	if errors.Is(err, objectstore.ErrPrecondition) {
+		object, err = store.objects.Stat(ctx, store.bucket, key)
+	}
+	if err != nil {
+		return Digest{}, objectstore.Object{}, err
+	}
+	if object.SHA256 != sum {
+		store.invalidate(ctx, digest)
+		return Digest{}, objectstore.Object{}, ErrDigestMismatch
+	}
+	store.cache(ctx, digest, object)
+	return digest, object.Clone(), nil
+}
+
+// Open opens a digest, verifying full reads and validating ranged metadata.
+func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectstore.ByteRange) (io.ReadCloser, objectstore.Object, error) {
+	body, object, err := store.objects.Get(ctx, store.bucket, store.key(digest), objectstore.GetOptions{Range: byteRange})
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			store.invalidate(ctx, digest)
+		}
+		return nil, objectstore.Object{}, err
+	}
+	store.cache(ctx, digest, object)
+	if byteRange != nil {
+		if object.SHA256 != [32]byte(digest) {
+			_ = body.Close()
+			store.invalidate(ctx, digest)
+			return nil, objectstore.Object{}, ErrDigestMismatch
+		}
+		return body, object.Clone(), nil
+	}
+	verified := &verifyingReadCloser{
+		body: body,
+		hash: sha256.New(),
+		want: digest,
+		onMismatch: func() {
+			store.invalidate(context.WithoutCancel(ctx), digest)
+		},
+	}
+	return verified, object.Clone(), nil
+}
+
+// Stat returns cached or authoritative metadata for a digest.
+func (store *Store) Stat(ctx context.Context, digest Digest) (objectstore.Object, error) {
+	if store.metadata != nil {
+		if object, ok, err := store.metadata.Get(ctx, digest.String()); err == nil && ok && object.SHA256 == [32]byte(digest) {
+			return object.Clone(), nil
+		}
+	}
+	object, err := store.objects.Stat(ctx, store.bucket, store.key(digest))
+	if err != nil {
+		if errors.Is(err, objectstore.ErrNotFound) {
+			store.invalidate(ctx, digest)
+		}
+		return objectstore.Object{}, err
+	}
+	if object.SHA256 != [32]byte(digest) {
+		store.invalidate(ctx, digest)
+		return objectstore.Object{}, ErrDigestMismatch
+	}
+	store.cache(ctx, digest, object)
+	return object.Clone(), nil
+}
+
+func (store *Store) key(digest Digest) objectstore.Key {
+	return objectstore.Key(store.prefix + "/" + digest.hex())
+}
+
+func (store *Store) cache(ctx context.Context, digest Digest, object objectstore.Object) {
+	if store.metadata != nil {
+		_ = store.metadata.Set(context.WithoutCancel(ctx), digest.String(), object.Clone())
+	}
+}
+
+func (store *Store) invalidate(ctx context.Context, digest Digest) {
+	if store.metadata != nil {
+		_ = store.metadata.Invalidate(context.WithoutCancel(ctx), digest.String())
+	}
+}
+
+type verifyingReadCloser struct {
+	body       io.ReadCloser
+	hash       hash.Hash
+	want       Digest
+	verified   bool
+	result     error
+	onMismatch func()
+}
+
+func (reader *verifyingReadCloser) Read(buffer []byte) (int, error) {
+	if reader.verified {
+		return 0, reader.result
+	}
+	count, err := reader.body.Read(buffer)
+	if count > 0 {
+		_, _ = reader.hash.Write(buffer[:count])
+	}
+	if errors.Is(err, io.EOF) {
+		reader.verified = true
+		var got Digest
+		copy(got[:], reader.hash.Sum(nil))
+		if got != reader.want {
+			reader.result = ErrDigestMismatch
+			reader.onMismatch()
+			return count, reader.result
+		}
+		reader.result = io.EOF
+	}
+	return count, err
+}
+
+func (reader *verifyingReadCloser) Close() error {
+	var verifyErr error
+	if !reader.verified {
+		_, verifyErr = io.Copy(io.Discard, reader)
+	} else if errors.Is(reader.result, ErrDigestMismatch) {
+		verifyErr = reader.result
+	}
+	return errors.Join(verifyErr, reader.body.Close())
+}
+
+func copyContext(ctx context.Context, destination io.Writer, source io.Reader) (int64, error) {
+	buffer := make([]byte, 32<<10)
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		count, readErr := source.Read(buffer)
+		if count > 0 {
+			written, writeErr := destination.Write(buffer[:count])
+			total += int64(written)
+			if writeErr != nil {
+				return total, writeErr
+			}
+			if written != count {
+				return total, io.ErrShortWrite
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			return total, nil
+		}
+		if readErr != nil {
+			return total, readErr
+		}
+	}
+}
