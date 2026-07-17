@@ -114,12 +114,16 @@ func TestOpenRejectsCorruptFullReadMetadata(t *testing.T) {
 }
 
 func TestPutReportsLeaseLoss(t *testing.T) {
-	store, err := New(memory.New(), "blobs", "sha256", nil, losingBackend{}, "writer")
+	objects := &countingStore{Store: memory.New()}
+	store, err := New(objects, "blobs", "sha256", nil, losingBackend{}, "writer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := store.Put(context.Background(), strings.NewReader("hello")); !errors.Is(err, coordination.ErrLeaseLost) {
 		t.Fatalf("Put error = %v, want ErrLeaseLost", err)
+	}
+	if calls := objects.putCalls.Load(); calls != 0 {
+		t.Fatalf("object Put calls = %d, want 0 after lease loss", calls)
 	}
 }
 
