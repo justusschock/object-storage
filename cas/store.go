@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ import (
 )
 
 const leaseTTL = time.Minute
+
+var errFillComplete = errors.New("cas: fill complete")
 
 // Store keeps immutable SHA-256-addressed objects.
 type Store struct {
@@ -31,10 +34,10 @@ type Store struct {
 
 // New constructs a content-addressed store.
 func New(objects objectstore.Store, bucket objectstore.Bucket, prefix string, metadata cache.Cache[string, objectstore.Object], backend coordination.Backend, owner string) (*Store, error) {
-	if objects == nil {
+	if isNil(objects) {
 		return nil, errors.New("cas: nil object store")
 	}
-	if backend == nil {
+	if isNil(backend) {
 		return nil, errors.New("cas: nil coordination backend")
 	}
 	if err := objectstore.ValidateBucket(bucket); err != nil {
@@ -46,6 +49,9 @@ func New(objects objectstore.Store, bucket objectstore.Bucket, prefix string, me
 	if owner == "" {
 		return nil, errors.New("cas: empty owner")
 	}
+	if isNil(metadata) {
+		metadata = nil
+	}
 	return &Store{objects: objects, bucket: bucket, prefix: prefix, metadata: metadata, coordination: backend, owner: owner}, nil
 }
 
@@ -54,7 +60,7 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	if err := ctx.Err(); err != nil {
 		return Digest{}, objectstore.Object{}, err
 	}
-	if reader == nil {
+	if isNil(reader) {
 		return Digest{}, objectstore.Object{}, errors.New("cas: nil reader")
 	}
 	temporary, err := os.CreateTemp("", "go-object-storage-cas-*")
@@ -86,13 +92,33 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 		return Digest{}, objectstore.Object{}, err
 	}
 	defer func() {
-		if err := lease.Release(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, coordination.ErrLeaseLost) {
+		if err := lease.Release(context.WithoutCancel(ctx)); err != nil {
 			returnErr = errors.Join(returnErr, fmt.Errorf("cas: release lease: %w", err))
+		}
+	}()
+	fillCtx, stopFill := context.WithCancelCause(ctx)
+	keepAlive, err := coordination.KeepAlive(fillCtx, lease, leaseTTL)
+	if err != nil {
+		stopFill(err)
+		return Digest{}, objectstore.Object{}, err
+	}
+	keepAliveResult := make(chan error, 1)
+	go func() {
+		_, keepAliveErr := keepAlive.Await(context.Background())
+		if keepAliveErr != nil && !errors.Is(keepAliveErr, errFillComplete) {
+			stopFill(keepAliveErr)
+		}
+		keepAliveResult <- keepAliveErr
+	}()
+	defer func() {
+		stopFill(errFillComplete)
+		if keepAliveErr := <-keepAliveResult; keepAliveErr != nil && !errors.Is(keepAliveErr, errFillComplete) {
+			returnErr = errors.Join(returnErr, fmt.Errorf("cas: keep lease alive: %w", keepAliveErr))
 		}
 	}()
 
 	key := store.key(digest)
-	existing, err := store.objects.Stat(ctx, store.bucket, key)
+	existing, err := store.objects.Stat(fillCtx, store.bucket, key)
 	if err == nil {
 		if existing.SHA256 != [32]byte(digest) {
 			store.invalidate(ctx, digest)
@@ -106,13 +132,13 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	}
 
 	sum := [32]byte(digest)
-	object, err = store.objects.Put(ctx, store.bucket, key, temporary, objectstore.PutOptions{
+	object, err = store.objects.Put(fillCtx, store.bucket, key, temporary, objectstore.PutOptions{
 		IfAbsent: true,
 		SHA256:   &sum,
 		Metadata: map[string]string{"object-storage-fencing-token": strconv.FormatUint(uint64(lease.Info().Token), 10)},
 	})
 	if errors.Is(err, objectstore.ErrPrecondition) {
-		object, err = store.objects.Stat(ctx, store.bucket, key)
+		object, err = store.objects.Stat(fillCtx, store.bucket, key)
 	}
 	if err != nil {
 		return Digest{}, objectstore.Object{}, err
@@ -133,6 +159,11 @@ func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectst
 			store.invalidate(ctx, digest)
 		}
 		return nil, objectstore.Object{}, err
+	}
+	if object.SHA256 != [32]byte(digest) {
+		_ = body.Close()
+		store.invalidate(ctx, digest)
+		return nil, objectstore.Object{}, ErrDigestMismatch
 	}
 	store.cache(ctx, digest, object)
 	if byteRange != nil {
@@ -257,5 +288,18 @@ func copyContext(ctx context.Context, destination io.Writer, source io.Reader) (
 		if readErr != nil {
 			return total, readErr
 		}
+	}
+}
+
+func isNil(value any) bool {
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return true
+	}
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
 	}
 }

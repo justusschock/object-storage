@@ -28,7 +28,7 @@ func ParseDigest(value string) (Digest, error) {
 		return Digest{}, ErrInvalidDigest
 	}
 	encoded := strings.TrimPrefix(value, "sha256:")
-	if len(encoded) != 64 {
+	if len(encoded) != 64 || encoded != strings.ToLower(encoded) {
 		return Digest{}, ErrInvalidDigest
 	}
 	decoded, err := hex.DecodeString(encoded)
