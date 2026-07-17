@@ -208,6 +208,23 @@ func TestCompleteAfterAbortReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestPutAbortsFailedManagerMultipartWithIndependentContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &fakeClient{abortOutput: &awss3.AbortMultipartUploadOutput{}}
+	uploader := &fakeUploader{
+		err:      fakeMultiUploadError{id: "upload-id", err: context.Canceled},
+		onUpload: cancel,
+	}
+	store := &Store{client: client, uploader: uploader}
+	_, err := store.Put(ctx, "bucket", "key", bytes.NewReader([]byte("value")), objectstore.PutOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Put error = %v, want context.Canceled", err)
+	}
+	if client.abortInput == nil || deref(client.abortInput.UploadId) != "upload-id" || client.abortContextErr != nil {
+		t.Fatalf("AbortMultipartUpload = (%#v, %v), want upload-id with live context", client.abortInput, client.abortContextErr)
+	}
+}
+
 func TestMapsS3Errors(t *testing.T) {
 	for code, want := range map[string]error{
 		"NoSuchKey": objectstore.ErrNotFound, "NoSuchUpload": objectstore.ErrNotFound,
@@ -222,17 +239,30 @@ func TestMapsS3Errors(t *testing.T) {
 }
 
 type fakeUploader struct {
-	input  *awss3.PutObjectInput
-	body   []byte
-	output *manager.UploadOutput
-	err    error
+	input    *awss3.PutObjectInput
+	body     []byte
+	output   *manager.UploadOutput
+	err      error
+	onUpload func()
 }
 
 func (fake *fakeUploader) Upload(_ context.Context, input *awss3.PutObjectInput, _ ...func(*manager.Uploader)) (*manager.UploadOutput, error) {
 	fake.input = input
 	fake.body, _ = io.ReadAll(input.Body)
+	if fake.onUpload != nil {
+		fake.onUpload()
+	}
 	return fake.output, fake.err
 }
+
+type fakeMultiUploadError struct {
+	id  string
+	err error
+}
+
+func (err fakeMultiUploadError) Error() string    { return "multipart upload failed: " + err.err.Error() }
+func (err fakeMultiUploadError) Unwrap() error    { return err.err }
+func (err fakeMultiUploadError) UploadID() string { return err.id }
 
 type fakeClient struct {
 	getInput         *awss3.GetObjectInput
@@ -250,6 +280,7 @@ type fakeClient struct {
 	completeOutput   *awss3.CompleteMultipartUploadOutput
 	abortInput       *awss3.AbortMultipartUploadInput
 	abortOutput      *awss3.AbortMultipartUploadOutput
+	abortContextErr  error
 	listPartsInput   *awss3.ListPartsInput
 	listPartsOutput  *awss3.ListPartsOutput
 	aborted          bool
@@ -284,8 +315,9 @@ func (fake *fakeClient) CompleteMultipartUpload(_ context.Context, input *awss3.
 	fake.completeInput = input
 	return fake.completeOutput, nil
 }
-func (fake *fakeClient) AbortMultipartUpload(_ context.Context, input *awss3.AbortMultipartUploadInput, _ ...func(*awss3.Options)) (*awss3.AbortMultipartUploadOutput, error) {
+func (fake *fakeClient) AbortMultipartUpload(ctx context.Context, input *awss3.AbortMultipartUploadInput, _ ...func(*awss3.Options)) (*awss3.AbortMultipartUploadOutput, error) {
 	fake.abortInput = input
+	fake.abortContextErr = ctx.Err()
 	fake.aborted = true
 	return fake.abortOutput, nil
 }
