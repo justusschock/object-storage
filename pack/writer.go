@@ -10,11 +10,13 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 
 	objectstore "github.com/justusschock/go-object-storage"
 	"github.com/justusschock/go-object-storage/cas"
+	multipartupload "github.com/justusschock/go-object-storage/multipart"
 )
 
 // Metadata is sufficient to reopen one immutable pack.
@@ -59,7 +61,7 @@ func (writer *Writer) Add(digest cas.Digest, reader io.Reader, size int64) (retu
 	if writer == nil || writer.consumed {
 		return errors.New("pack: writer is closed")
 	}
-	if reader == nil || size <= 0 {
+	if isNil(reader) || size <= 0 {
 		return ErrInvalidPack
 	}
 	if _, exists := writer.blobs[digest]; exists {
@@ -95,7 +97,7 @@ func (writer *Writer) Commit(ctx context.Context, store objectstore.Store, bucke
 	if writer == nil || writer.consumed || len(writer.blobs) == 0 {
 		return Metadata{}, ErrInvalidPack
 	}
-	if store == nil {
+	if isNil(store) {
 		return Metadata{}, errors.New("pack: nil store")
 	}
 	if err := ctx.Err(); err != nil {
@@ -107,9 +109,6 @@ func (writer *Writer) Commit(ctx context.Context, store objectstore.Store, bucke
 	if err := objectstore.ValidateKey(objectstore.Key(prefix + "/pack")); err != nil || strings.HasSuffix(prefix, "/") {
 		return Metadata{}, fmt.Errorf("pack: invalid prefix %q", prefix)
 	}
-	writer.consumed = true
-	defer os.RemoveAll(writer.directory)
-
 	digests := make([]cas.Digest, 0, len(writer.blobs))
 	for digest := range writer.blobs {
 		digests = append(digests, digest)
@@ -159,13 +158,46 @@ func (writer *Writer) Commit(ctx context.Context, store objectstore.Store, bucke
 	if _, err := dataFile.Seek(0, io.SeekStart); err != nil {
 		return Metadata{}, err
 	}
-	if err := putImmutable(ctx, store, bucket, metadata.DataKey, dataFile, dataDigest); err != nil {
+	if err := putDataImmutable(ctx, store, bucket, metadata.DataKey, dataFile, offset, dataDigest); err != nil {
 		return Metadata{}, err
 	}
 	if err := putImmutable(ctx, store, bucket, metadata.IndexKey, bytes.NewReader(indexBytes), indexDigest); err != nil {
 		return Metadata{}, err
 	}
+	writer.consumed = true
+	if err := os.RemoveAll(writer.directory); err != nil {
+		return Metadata{}, err
+	}
 	return metadata, nil
+}
+
+func putDataImmutable(ctx context.Context, store objectstore.Store, bucket objectstore.Bucket, key objectstore.Key, file *os.File, size int64, digest [32]byte) error {
+	multipartStore, ok := store.(objectstore.MultipartStore)
+	if !ok || isNil(multipartStore) {
+		return putImmutable(ctx, store, bucket, key, file, digest)
+	}
+	uploader, err := multipartupload.NewUploader(multipartStore, multipartupload.Options{PartSize: 5 << 20, MaxParallel: 4})
+	if err != nil {
+		return err
+	}
+	object, err := uploader.UploadReaderAt(ctx, bucket, key, file, size, objectstore.PutOptions{IfAbsent: true, SHA256: &digest})
+	if !errors.Is(err, objectstore.ErrPrecondition) {
+		if err != nil {
+			return err
+		}
+		if object.SHA256 != digest {
+			return ErrInvalidPack
+		}
+		return nil
+	}
+	object, statErr := store.Stat(ctx, bucket, key)
+	if statErr != nil {
+		return errors.Join(err, statErr)
+	}
+	if object.SHA256 != digest {
+		return ErrInvalidPack
+	}
+	return nil
 }
 
 func putImmutable(ctx context.Context, store objectstore.Store, bucket objectstore.Bucket, key objectstore.Key, reader io.Reader, digest [32]byte) error {
@@ -220,5 +252,18 @@ func copyContext(ctx context.Context, destination io.Writer, source io.Reader) (
 		if readErr != nil {
 			return total, readErr
 		}
+	}
+}
+
+func isNil(value any) bool {
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return true
+	}
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
 	}
 }

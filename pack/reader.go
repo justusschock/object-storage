@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"hash"
 	"io"
 	"sort"
 
@@ -21,7 +22,7 @@ type Reader struct {
 
 // OpenReader loads and validates a pack index and its data bounds.
 func OpenReader(ctx context.Context, store objectstore.Store, metadata Metadata) (*Reader, error) {
-	if store == nil || metadata.DataSize < 0 {
+	if isNil(store) || metadata.DataSize < 0 {
 		return nil, ErrInvalidPack
 	}
 	body, object, err := store.Get(ctx, metadata.Bucket, metadata.IndexKey, objectstore.GetOptions{})
@@ -66,5 +67,44 @@ func (reader *Reader) Open(ctx context.Context, digest cas.Digest) (io.ReadClose
 	if err != nil {
 		return nil, Entry{}, err
 	}
-	return body, entry, nil
+	return &verifyingReadCloser{body: body, hash: sha256.New(), want: entry.Digest}, entry, nil
+}
+
+type verifyingReadCloser struct {
+	body     io.ReadCloser
+	hash     hash.Hash
+	want     cas.Digest
+	verified bool
+	result   error
+}
+
+func (reader *verifyingReadCloser) Read(buffer []byte) (int, error) {
+	if reader.verified {
+		return 0, reader.result
+	}
+	count, err := reader.body.Read(buffer)
+	if count > 0 {
+		_, _ = reader.hash.Write(buffer[:count])
+	}
+	if errors.Is(err, io.EOF) {
+		reader.verified = true
+		var digest cas.Digest
+		copy(digest[:], reader.hash.Sum(nil))
+		if digest != reader.want {
+			reader.result = ErrInvalidPack
+			return count, reader.result
+		}
+		reader.result = io.EOF
+	}
+	return count, err
+}
+
+func (reader *verifyingReadCloser) Close() error {
+	var verifyErr error
+	if !reader.verified {
+		_, verifyErr = io.Copy(io.Discard, reader)
+	} else if errors.Is(reader.result, ErrInvalidPack) {
+		verifyErr = reader.result
+	}
+	return errors.Join(verifyErr, reader.body.Close())
 }
