@@ -113,6 +113,7 @@ func TestMultipartMapsOrderingChecksumsCompletionAndAbort(t *testing.T) {
 		createOutput:     &awss3.CreateMultipartUploadOutput{UploadId: ptr("upload-id")},
 		uploadPartOutput: &awss3.UploadPartOutput{ETag: ptr(`"part"`), ChecksumSHA256: ptr(base64.StdEncoding.EncodeToString(partDigest[:]))},
 		completeOutput:   &awss3.CompleteMultipartUploadOutput{ETag: ptr(`"etag"`)},
+		getOutput:        &awss3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(partData))},
 		headOutput:       &awss3.HeadObjectOutput{ContentLength: ptr(int64(len(partData))), ETag: ptr(`"etag"`), LastModified: &now, Metadata: map[string]string{sha256MetadataKey: hex.EncodeToString(fullDigest[:])}},
 		abortOutput:      &awss3.AbortMultipartUploadOutput{},
 	}
