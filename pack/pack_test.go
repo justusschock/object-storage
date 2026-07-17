@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"strings"
@@ -117,6 +118,101 @@ func TestOpenReaderRejectsTruncatedAndOverflowingIndexes(t *testing.T) {
 	}
 }
 
+func TestReaderDetectsSameSizeDataTampering(t *testing.T) {
+	digest := cas.Digest(sha256.Sum256([]byte("value")))
+	objects := memory.New()
+	writer, err := NewWriter(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Add(digest, strings.NewReader("value"), 5); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := writer.Commit(context.Background(), objects, "packs", "tamper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataObject, err := objects.Stat(context.Background(), metadata.Bucket, metadata.DataKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := objects.Delete(context.Background(), metadata.Bucket, metadata.DataKey, dataObject.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := objects.Put(context.Background(), metadata.Bucket, metadata.DataKey, strings.NewReader("other"), objectstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := OpenReader(context.Background(), objects, metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, err := reader.Open(context.Background(), digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, readErr := io.ReadAll(body)
+	closeErr := body.Close()
+	if !errors.Is(errors.Join(readErr, closeErr), ErrInvalidPack) {
+		t.Fatalf("read error = %v, close error = %v, want ErrInvalidPack", readErr, closeErr)
+	}
+}
+
+func TestCommitCanRetryAfterIndexFailure(t *testing.T) {
+	digest := cas.Digest(sha256.Sum256([]byte("value")))
+	underlying := memory.New()
+	objects := &failIndexOnceStore{Store: underlying}
+	writer, err := NewWriter(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Add(digest, strings.NewReader("value"), 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Commit(context.Background(), objects, "packs", "retry"); !errors.Is(err, errIndexPut) {
+		t.Fatalf("first Commit error = %v, want injected error", err)
+	}
+	if _, err := writer.Commit(context.Background(), objects, "packs", "retry"); err != nil {
+		t.Fatalf("retry Commit error = %v", err)
+	}
+}
+
+func TestCommitUsesMultipartStoreWhenAvailable(t *testing.T) {
+	digest := cas.Digest(sha256.Sum256([]byte("value")))
+	objects := &recordingMultipartStore{Store: memory.New()}
+	writer, err := NewWriter(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Add(digest, strings.NewReader("value"), 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Commit(context.Background(), objects, "packs", "multipart"); err != nil {
+		t.Fatal(err)
+	}
+	if objects.beginCalls != 1 {
+		t.Fatalf("BeginMultipart calls = %d, want 1", objects.beginCalls)
+	}
+}
+
+func TestWriterRejectsTypedNilInputs(t *testing.T) {
+	writer, err := NewWriter(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reader *bytes.Reader
+	if err := writer.Add(cas.Digest{}, reader, 1); err == nil {
+		t.Fatal("Add accepted typed-nil reader")
+	}
+	valid := cas.Digest(sha256.Sum256([]byte("v")))
+	if err := writer.Add(valid, strings.NewReader("v"), 1); err != nil {
+		t.Fatal(err)
+	}
+	var store *nilStore
+	if _, err := writer.Commit(context.Background(), store, "packs", "nil"); err == nil {
+		t.Fatal("Commit accepted typed-nil store")
+	}
+}
+
 func maliciousIndex(digest cas.Digest, offset, length uint64) []byte {
 	buffer := bytes.NewBufferString("GOPACK01")
 	_ = binary.Write(buffer, binary.BigEndian, uint64(1))
@@ -132,6 +228,33 @@ type recordingStore struct {
 	getCalls  int
 	lastRange *objectstore.ByteRange
 }
+
+var errIndexPut = errors.New("injected index put failure")
+
+type failIndexOnceStore struct {
+	objectstore.Store
+	failed bool
+}
+
+func (store *failIndexOnceStore) Put(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, body io.Reader, options objectstore.PutOptions) (objectstore.Object, error) {
+	if strings.HasSuffix(string(key), ".idx") && !store.failed {
+		store.failed = true
+		return objectstore.Object{}, errIndexPut
+	}
+	return store.Store.Put(ctx, bucket, key, body, options)
+}
+
+type recordingMultipartStore struct {
+	*memory.Store
+	beginCalls int
+}
+
+func (store *recordingMultipartStore) BeginMultipart(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) (objectstore.Upload, error) {
+	store.beginCalls++
+	return store.Store.BeginMultipart(ctx, bucket, key, options)
+}
+
+type nilStore struct{ objectstore.Store }
 
 func (store *recordingStore) Get(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.GetOptions) (io.ReadCloser, objectstore.Object, error) {
 	store.mu.Lock()
