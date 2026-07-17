@@ -3,8 +3,10 @@ package handoff
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	lifecyclehandoff "github.com/justusschock/go-lifecycle/handoff"
@@ -117,6 +119,42 @@ func TestTransportSendIsIdempotent(t *testing.T) {
 	if err != nil || second != first {
 		t.Fatalf("second Send = (%#v, %v), want %#v", second, err, first)
 	}
+}
+
+func TestEnvelopeRejectsNonCanonicalAndDuplicateJSON(t *testing.T) {
+	artifact, err := lifecyclehandoff.NewArtifact("application/test", 1, []byte("ok"), map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, _, err := marshalEnvelope(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header, data := splitFrame(t, frame)
+	for _, modified := range [][]byte{
+		append([]byte("{ "), header[1:]...),
+		[]byte(strings.Replace(string(header), `"format":`, `"format":"go-object-storage/handoff/v1","format":`, 1)),
+		[]byte(strings.Replace(string(header), `"key":"value"`, `"key":"first","key":"value"`, 1)),
+	} {
+		if _, _, err := unmarshalEnvelope(joinFrame(modified, data)); err == nil {
+			t.Fatalf("unmarshalEnvelope accepted non-canonical header %s", modified)
+		}
+	}
+}
+
+func splitFrame(t *testing.T, frame []byte) ([]byte, []byte) {
+	t.Helper()
+	length := binary.BigEndian.Uint64(frame[:8])
+	end := 8 + int(length)
+	return bytes.Clone(frame[8:end]), bytes.Clone(frame[end:])
+}
+
+func joinFrame(header, data []byte) []byte {
+	frame := make([]byte, 8+len(header)+len(data))
+	binary.BigEndian.PutUint64(frame[:8], uint64(len(header)))
+	copy(frame[8:], header)
+	copy(frame[8+len(header):], data)
+	return frame
 }
 
 var _ lifecyclehandoff.Transport = (*Transport)(nil)
