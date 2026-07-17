@@ -70,6 +70,9 @@ func (store *Store) Put(ctx context.Context, bucket objectstore.Bucket, key obje
 
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return objectstore.Object{}, err
+	}
 	return store.putLocked(bucket, key, data, digest, options)
 }
 
