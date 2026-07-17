@@ -41,7 +41,7 @@ func ValidateKey(key Key) error {
 	if strings.ContainsRune(value, '\\') {
 		return fmt.Errorf("%w: contains backslash", ErrInvalidKey)
 	}
-	for segment := range strings.SplitSeq(value, "/") {
+	for _, segment := range strings.Split(value, "/") {
 		if segment == ".." {
 			return fmt.Errorf("%w: parent segment", ErrInvalidKey)
 		}
