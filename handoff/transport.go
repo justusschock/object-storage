@@ -13,6 +13,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 
 	lifecyclehandoff "github.com/justusschock/go-lifecycle/handoff"
 	objectstore "github.com/justusschock/go-object-storage"
@@ -67,6 +68,14 @@ func (transport *Transport) Send(ctx context.Context, artifact lifecyclehandoff.
 	artifact = artifact.Clone()
 	if err := artifact.Validate(); err != nil {
 		return lifecyclehandoff.Receipt{}, err
+	}
+	if !utf8.ValidString(artifact.MediaType) {
+		return lifecyclehandoff.Receipt{}, errors.New("object handoff: artifact contains invalid UTF-8")
+	}
+	for key, value := range artifact.Metadata {
+		if !utf8.ValidString(key) || !utf8.ValidString(value) {
+			return lifecyclehandoff.Receipt{}, errors.New("object handoff: artifact contains invalid UTF-8")
+		}
 	}
 	frame, frameDigest, err := marshalEnvelope(artifact)
 	if err != nil {
