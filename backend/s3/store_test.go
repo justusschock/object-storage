@@ -45,7 +45,7 @@ func TestPutMapsConditionalsChecksumAndMetadata(t *testing.T) {
 			}
 			input := uploader.input
 			if deref(input.IfNoneMatch) != test.wantNone || deref(input.IfMatch) != test.wantMatch ||
-				deref(input.ChecksumSHA256) != base64.StdEncoding.EncodeToString(digest[:]) || input.ChecksumAlgorithm != types.ChecksumAlgorithmSha256 {
+				input.ChecksumSHA256 != nil || input.ChecksumAlgorithm != types.ChecksumAlgorithmSha256 {
 				t.Fatalf("PutObjectInput = %#v", input)
 			}
 			if !bytes.Equal(uploader.body, data) || input.Metadata["owner"] != "caller" || input.Metadata[sha256MetadataKey] != hex.EncodeToString(digest[:]) {
@@ -55,6 +55,20 @@ func TestPutMapsConditionalsChecksumAndMetadata(t *testing.T) {
 				t.Fatalf("object = %#v", object)
 			}
 		})
+	}
+}
+
+func TestGetRejectsShortenedRange(t *testing.T) {
+	digest := sha256.Sum256([]byte("0123456789"))
+	now := time.Unix(456, 0)
+	client := &fakeClient{getOutput: &awss3.GetObjectOutput{
+		Body: io.NopCloser(bytes.NewReader([]byte("89"))), ContentLength: ptr(int64(2)), ContentRange: ptr("bytes 8-9/10"),
+		ETag: ptr(`"etag"`), LastModified: &now, Metadata: map[string]string{sha256MetadataKey: hex.EncodeToString(digest[:])},
+	}}
+	store := &Store{client: client, uploader: &fakeUploader{}}
+	body, _, err := store.Get(context.Background(), "bucket", "key", objectstore.GetOptions{Range: &objectstore.ByteRange{Offset: 8, Length: 3}})
+	if body != nil || !errors.Is(err, objectstore.ErrInvalidRange) {
+		t.Fatalf("Get shortened range = (%#v, %v), want nil ErrInvalidRange", body, err)
 	}
 }
 
@@ -112,12 +126,14 @@ func TestMultipartMapsOrderingChecksumsCompletionAndAbort(t *testing.T) {
 	client := &fakeClient{
 		createOutput:     &awss3.CreateMultipartUploadOutput{UploadId: ptr("upload-id")},
 		uploadPartOutput: &awss3.UploadPartOutput{ETag: ptr(`"part"`), ChecksumSHA256: ptr(base64.StdEncoding.EncodeToString(partDigest[:]))},
-		completeOutput:   &awss3.CompleteMultipartUploadOutput{ETag: ptr(`"etag"`)},
+		completeOutput:   &awss3.CompleteMultipartUploadOutput{ETag: ptr(`"staging"`)},
 		getOutput:        &awss3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(partData))},
 		headOutput:       &awss3.HeadObjectOutput{ContentLength: ptr(int64(len(partData))), ETag: ptr(`"etag"`), LastModified: &now, Metadata: map[string]string{sha256MetadataKey: hex.EncodeToString(fullDigest[:])}},
 		abortOutput:      &awss3.AbortMultipartUploadOutput{},
+		listPartsOutput:  &awss3.ListPartsOutput{},
 	}
-	store := &Store{client: client, uploader: &fakeUploader{}}
+	uploader := &fakeUploader{output: &manager.UploadOutput{ETag: ptr(`"etag"`)}}
+	store := &Store{client: client, uploader: uploader}
 	upload, err := store.BeginMultipart(context.Background(), "bucket", "key", objectstore.PutOptions{IfAbsent: true, SHA256: &fullDigest})
 	if err != nil {
 		t.Fatal(err)
@@ -132,15 +148,63 @@ func TestMultipartMapsOrderingChecksumsCompletionAndAbort(t *testing.T) {
 	if _, err := store.CompleteMultipart(context.Background(), upload, []objectstore.CompletedPart{{Number: 2}, part}); !errors.Is(err, objectstore.ErrInvalidPart) {
 		t.Fatalf("unsorted completion error = %v", err)
 	}
+	upload.Options.IfAbsent = false
+	upload.Options.SHA256 = nil
 	object, err := store.CompleteMultipart(context.Background(), upload, []objectstore.CompletedPart{part})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deref(client.completeInput.IfNoneMatch) != "*" || len(client.completeInput.MultipartUpload.Parts) != 1 || object.SHA256 != fullDigest {
-		t.Fatalf("CompleteMultipartUploadInput/object = %#v, %#v", client.completeInput, object)
+	if deref(client.completeInput.Key) == "key" || len(client.completeInput.MultipartUpload.Parts) != 1 ||
+		deref(uploader.input.IfNoneMatch) != "*" || uploader.input.Metadata[sha256MetadataKey] != hex.EncodeToString(fullDigest[:]) || object.SHA256 != fullDigest {
+		t.Fatalf("CompleteMultipartUploadInput/final Put/object = %#v, %#v, %#v", client.completeInput, uploader.input, object)
 	}
 	if err := store.AbortMultipart(context.Background(), upload); err != nil || deref(client.abortInput.UploadId) != "upload-id" {
 		t.Fatalf("AbortMultipart = %v, input %#v", err, client.abortInput)
+	}
+}
+
+func TestMultipartChecksumMismatchNeverPublishesFinalKey(t *testing.T) {
+	want := sha256.Sum256([]byte("expected"))
+	partDigest := sha256.Sum256([]byte("wrong"))
+	now := time.Unix(1000, 0)
+	client := &fakeClient{
+		createOutput:     &awss3.CreateMultipartUploadOutput{UploadId: ptr("upload-id")},
+		uploadPartOutput: &awss3.UploadPartOutput{ETag: ptr(`"part"`)},
+		completeOutput:   &awss3.CompleteMultipartUploadOutput{ETag: ptr(`"staging"`)},
+		getOutput:        &awss3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader([]byte("wrong")))},
+		headOutput:       &awss3.HeadObjectOutput{ContentLength: ptr(int64(5)), ETag: ptr(`"staging"`), LastModified: &now, Metadata: map[string]string{sha256MetadataKey: hex.EncodeToString(want[:])}},
+		listPartsOutput:  &awss3.ListPartsOutput{},
+	}
+	uploader := &fakeUploader{output: &manager.UploadOutput{}}
+	store := &Store{client: client, uploader: uploader}
+	upload, err := store.BeginMultipart(context.Background(), "bucket", "final", objectstore.PutOptions{SHA256: &want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	part, err := store.PutPart(context.Background(), upload, 1, bytes.NewReader([]byte("wrong")), 5, partDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CompleteMultipart(context.Background(), upload, []objectstore.CompletedPart{part}); !errors.Is(err, objectstore.ErrPrecondition) {
+		t.Fatalf("CompleteMultipart error = %v, want ErrPrecondition", err)
+	}
+	if uploader.input != nil || client.deleteInput == nil || deref(client.deleteInput.Key) == "final" {
+		t.Fatalf("mismatch published or deleted final key: upload %#v, delete %#v", uploader.input, client.deleteInput)
+	}
+}
+
+func TestCompleteAfterAbortReturnsNotFound(t *testing.T) {
+	client := &fakeClient{createOutput: &awss3.CreateMultipartUploadOutput{UploadId: ptr("upload-id")}, abortOutput: &awss3.AbortMultipartUploadOutput{}, listPartsOutput: &awss3.ListPartsOutput{}}
+	store := &Store{client: client, uploader: &fakeUploader{}}
+	upload, err := store.BeginMultipart(context.Background(), "bucket", "key", objectstore.PutOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AbortMultipart(context.Background(), upload); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CompleteMultipart(context.Background(), upload, nil); !errors.Is(err, objectstore.ErrNotFound) {
+		t.Fatalf("CompleteMultipart after abort error = %v, want ErrNotFound", err)
 	}
 }
 
@@ -148,6 +212,7 @@ func TestMapsS3Errors(t *testing.T) {
 	for code, want := range map[string]error{
 		"NoSuchKey": objectstore.ErrNotFound, "NoSuchUpload": objectstore.ErrNotFound,
 		"PreconditionFailed": objectstore.ErrPrecondition, "InvalidRange": objectstore.ErrInvalidRange,
+		"InvalidPart": objectstore.ErrInvalidPart, "InvalidPartOrder": objectstore.ErrInvalidPart,
 	} {
 		got := mapError(&smithy.GenericAPIError{Code: code, Message: "failed"})
 		if !errors.Is(got, want) {
@@ -176,6 +241,7 @@ type fakeClient struct {
 	headOutput       *awss3.HeadObjectOutput
 	listInput        *awss3.ListObjectsV2Input
 	listOutput       *awss3.ListObjectsV2Output
+	deleteInput      *awss3.DeleteObjectInput
 	createInput      *awss3.CreateMultipartUploadInput
 	createOutput     *awss3.CreateMultipartUploadOutput
 	uploadPartInput  *awss3.UploadPartInput
@@ -184,6 +250,9 @@ type fakeClient struct {
 	completeOutput   *awss3.CompleteMultipartUploadOutput
 	abortInput       *awss3.AbortMultipartUploadInput
 	abortOutput      *awss3.AbortMultipartUploadOutput
+	listPartsInput   *awss3.ListPartsInput
+	listPartsOutput  *awss3.ListPartsOutput
+	aborted          bool
 }
 
 func (fake *fakeClient) GetObject(_ context.Context, input *awss3.GetObjectInput, _ ...func(*awss3.Options)) (*awss3.GetObjectOutput, error) {
@@ -194,7 +263,9 @@ func (fake *fakeClient) HeadObject(_ context.Context, input *awss3.HeadObjectInp
 	fake.headInput = input
 	return fake.headOutput, nil
 }
-func (fake *fakeClient) DeleteObject(_ context.Context, _ *awss3.DeleteObjectInput, _ ...func(*awss3.Options)) (*awss3.DeleteObjectOutput, error) {
+
+func (fake *fakeClient) DeleteObject(_ context.Context, input *awss3.DeleteObjectInput, _ ...func(*awss3.Options)) (*awss3.DeleteObjectOutput, error) {
+	fake.deleteInput = input
 	return &awss3.DeleteObjectOutput{}, nil
 }
 func (fake *fakeClient) ListObjectsV2(_ context.Context, input *awss3.ListObjectsV2Input, _ ...func(*awss3.Options)) (*awss3.ListObjectsV2Output, error) {
@@ -215,7 +286,15 @@ func (fake *fakeClient) CompleteMultipartUpload(_ context.Context, input *awss3.
 }
 func (fake *fakeClient) AbortMultipartUpload(_ context.Context, input *awss3.AbortMultipartUploadInput, _ ...func(*awss3.Options)) (*awss3.AbortMultipartUploadOutput, error) {
 	fake.abortInput = input
+	fake.aborted = true
 	return fake.abortOutput, nil
+}
+func (fake *fakeClient) ListParts(_ context.Context, input *awss3.ListPartsInput, _ ...func(*awss3.Options)) (*awss3.ListPartsOutput, error) {
+	fake.listPartsInput = input
+	if fake.aborted {
+		return nil, &smithy.GenericAPIError{Code: "NoSuchUpload", Message: "aborted"}
+	}
+	return fake.listPartsOutput, nil
 }
 
 func ptr[T any](value T) *T { return &value }
