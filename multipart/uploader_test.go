@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"io"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -78,6 +79,20 @@ func TestNewUploaderValidatesOptions(t *testing.T) {
 	}
 }
 
+func TestUploaderRejectsPartCountOverflowBeforeBegin(t *testing.T) {
+	backend := &recordingMultipart{}
+	uploader, err := newUploader(backend, Options{PartSize: 5, MaxParallel: 1}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := uploader.UploadReaderAt(context.Background(), "objects", "key", bytes.NewReader(nil), math.MaxInt64, objectstore.PutOptions{}); err == nil {
+		t.Fatal("UploadReaderAt returned nil error")
+	}
+	if backend.beginCalls != 0 {
+		t.Fatalf("BeginMultipart calls = %d, want 0", backend.beginCalls)
+	}
+}
+
 type recordingMultipart struct {
 	objectstore.MultipartStore
 
@@ -87,11 +102,15 @@ type recordingMultipart struct {
 	failPart      int
 	abortErr      error
 	completed     []objectstore.CompletedPart
+	beginCalls    int
 	completeCalls int
 	abortCalls    int
 }
 
 func (backend *recordingMultipart) BeginMultipart(_ context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) (objectstore.Upload, error) {
+	backend.mu.Lock()
+	backend.beginCalls++
+	backend.mu.Unlock()
 	return objectstore.Upload{ID: "upload", Bucket: bucket, Key: key, Options: options.Clone()}, nil
 }
 
