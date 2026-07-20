@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,16 +44,20 @@ func TestIntegrationConformance(t *testing.T) {
 	}
 	var sequence atomic.Uint64
 	runID := time.Now().UTC().UnixNano()
+	runPrefix := fmt.Sprintf("go-object-storage-conformance/%d/", runID)
+	cleanup := &integrationCleanup{}
+	t.Cleanup(func() { cleanup.run(t, client, bucket, runPrefix) })
 	storetest.Run(t, func(t *testing.T) objectstore.MultipartStore {
-		prefix := fmt.Sprintf("go-object-storage-conformance/%d/%d/", runID, sequence.Add(1))
-		return &boundStore{store: store, bucket: objectstore.Bucket(bucket), prefix: prefix}
+		prefix := fmt.Sprintf("%s%d/", runPrefix, sequence.Add(1))
+		return &boundStore{store: store, bucket: objectstore.Bucket(bucket), prefix: prefix, cleanup: cleanup}
 	})
 }
 
 type boundStore struct {
-	store  objectstore.MultipartStore
-	bucket objectstore.Bucket
-	prefix string
+	store   objectstore.MultipartStore
+	bucket  objectstore.Bucket
+	prefix  string
+	cleanup *integrationCleanup
 }
 
 func (store *boundStore) Put(ctx context.Context, _ objectstore.Bucket, key objectstore.Key, body io.Reader, options objectstore.PutOptions) (objectstore.Object, error) {
@@ -91,6 +96,9 @@ func (store *boundStore) List(ctx context.Context, _ objectstore.Bucket, options
 
 func (store *boundStore) BeginMultipart(ctx context.Context, _ objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) (objectstore.Upload, error) {
 	upload, err := store.store.BeginMultipart(ctx, store.bucket, store.key(key), options)
+	if err == nil {
+		store.cleanup.record(upload)
+	}
 	upload.Bucket, upload.Key = "objects", key
 	return upload, err
 }
@@ -124,4 +132,59 @@ func (store *boundStore) object(object objectstore.Object) objectstore.Object {
 	object.Bucket = "objects"
 	object.Key = objectstore.Key(strings.TrimPrefix(string(object.Key), store.prefix))
 	return object
+}
+
+type integrationCleanup struct {
+	mu      sync.Mutex
+	uploads []objectstore.Upload
+}
+
+func (cleanup *integrationCleanup) record(upload objectstore.Upload) {
+	cleanup.mu.Lock()
+	defer cleanup.mu.Unlock()
+	cleanup.uploads = append(cleanup.uploads, upload)
+}
+
+func (cleanup *integrationCleanup) run(t *testing.T, client *awss3.Client, bucket string, prefix string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cleanup.mu.Lock()
+	uploads := append([]objectstore.Upload(nil), cleanup.uploads...)
+	cleanup.mu.Unlock()
+	for _, upload := range uploads {
+		custody, err := decodeMultipartCustody(ctx, upload)
+		if err != nil {
+			t.Errorf("decode multipart cleanup token: %v", err)
+			continue
+		}
+		_, _ = client.AbortMultipartUpload(ctx, &awss3.AbortMultipartUploadInput{
+			Bucket: &bucket, Key: &custody.StagingKey, UploadId: &custody.UploadID,
+		})
+		_, _ = client.DeleteObject(ctx, &awss3.DeleteObjectInput{Bucket: &bucket, Key: &custody.StagingKey})
+	}
+	var token *string
+	for {
+		output, err := client.ListObjectsV2(ctx, &awss3.ListObjectsV2Input{Bucket: &bucket, Prefix: &prefix, ContinuationToken: token})
+		if err != nil {
+			t.Errorf("list integration cleanup prefix: %v", err)
+			return
+		}
+		for _, object := range output.Contents {
+			if object.Key == nil {
+				continue
+			}
+			if _, err := client.DeleteObject(ctx, &awss3.DeleteObjectInput{Bucket: &bucket, Key: object.Key}); err != nil {
+				t.Errorf("delete integration object: %v", err)
+			}
+		}
+		if output.IsTruncated == nil || !*output.IsTruncated {
+			return
+		}
+		if output.NextContinuationToken == nil || *output.NextContinuationToken == "" {
+			t.Error("integration cleanup listing was truncated without a continuation token")
+			return
+		}
+		token = output.NextContinuationToken
+	}
 }

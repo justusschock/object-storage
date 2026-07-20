@@ -208,6 +208,43 @@ func TestCompleteAfterAbortReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestCompleteResumesFromCompletedStagingObject(t *testing.T) {
+	data := []byte("complete")
+	digest := sha256.Sum256(data)
+	now := time.Unix(1001, 0)
+	client := &fakeClient{
+		createOutput: &awss3.CreateMultipartUploadOutput{UploadId: ptr("upload-id")},
+		listPartsErr: &smithy.GenericAPIError{Code: "NoSuchUpload", Message: "completion response was lost"},
+		getOutput:    &awss3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(data))},
+		headOutputs: []*awss3.HeadObjectOutput{
+			{ContentLength: ptr(int64(len(data))), ETag: ptr(`"staging"`), LastModified: &now},
+			{ContentLength: ptr(int64(len(data))), ETag: ptr(`"final"`), LastModified: &now, Metadata: map[string]string{sha256MetadataKey: hex.EncodeToString(digest[:])}},
+		},
+	}
+	uploader := &fakeUploader{output: &manager.UploadOutput{ETag: ptr(`"final"`)}}
+	store := &Store{client: client, uploader: uploader}
+	upload, err := store.BeginMultipart(context.Background(), "bucket", "key", objectstore.PutOptions{SHA256: &digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	object, err := store.CompleteMultipart(context.Background(), upload, []objectstore.CompletedPart{{Number: 1, ETag: `"part"`, Size: int64(len(data)), SHA256: digest}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.completeInput != nil || uploader.input == nil || object.SHA256 != digest {
+		t.Fatalf("resume completed staging = complete %#v, upload %#v, object %#v", client.completeInput, uploader.input, object)
+	}
+}
+
+func TestBeginMultipartRejectsLossyCustodyBeforeCreatingUpload(t *testing.T) {
+	client := &fakeClient{}
+	store := &Store{client: client, uploader: &fakeUploader{}}
+	_, err := store.BeginMultipart(context.Background(), "bucket", "key", objectstore.PutOptions{Metadata: map[string]string{"owner": string([]byte{0xff})}})
+	if err == nil || client.createInput != nil {
+		t.Fatalf("BeginMultipart = (%v, create %#v), want rejection before side effect", err, client.createInput)
+	}
+}
+
 func TestPutAbortsFailedManagerMultipartWithIndependentContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	client := &fakeClient{abortOutput: &awss3.AbortMultipartUploadOutput{}}
@@ -269,6 +306,7 @@ type fakeClient struct {
 	getOutput        *awss3.GetObjectOutput
 	headInput        *awss3.HeadObjectInput
 	headOutput       *awss3.HeadObjectOutput
+	headOutputs      []*awss3.HeadObjectOutput
 	listInput        *awss3.ListObjectsV2Input
 	listOutput       *awss3.ListObjectsV2Output
 	deleteInput      *awss3.DeleteObjectInput
@@ -283,6 +321,7 @@ type fakeClient struct {
 	abortContextErr  error
 	listPartsInput   *awss3.ListPartsInput
 	listPartsOutput  *awss3.ListPartsOutput
+	listPartsErr     error
 	aborted          bool
 }
 
@@ -292,6 +331,11 @@ func (fake *fakeClient) GetObject(_ context.Context, input *awss3.GetObjectInput
 }
 func (fake *fakeClient) HeadObject(_ context.Context, input *awss3.HeadObjectInput, _ ...func(*awss3.Options)) (*awss3.HeadObjectOutput, error) {
 	fake.headInput = input
+	if len(fake.headOutputs) > 0 {
+		output := fake.headOutputs[0]
+		fake.headOutputs = fake.headOutputs[1:]
+		return output, nil
+	}
 	return fake.headOutput, nil
 }
 
@@ -326,7 +370,7 @@ func (fake *fakeClient) ListParts(_ context.Context, input *awss3.ListPartsInput
 	if fake.aborted {
 		return nil, &smithy.GenericAPIError{Code: "NoSuchUpload", Message: "aborted"}
 	}
-	return fake.listPartsOutput, nil
+	return fake.listPartsOutput, fake.listPartsErr
 }
 
 func ptr[T any](value T) *T { return &value }
