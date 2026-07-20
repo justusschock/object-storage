@@ -50,4 +50,7 @@ func TestCICompatibilityContract(t *testing.T) {
 	if !strings.Contains(string(script), `export GOMODCACHE=${temporary_directory}/gomodcache`) {
 		t.Error("release module verifier does not isolate the exact candidate from the ambient module cache")
 	}
+	if !strings.Contains(string(script), "go clean -modcache") {
+		t.Error("release module verifier does not safely clean its read-only module cache")
+	}
 }
