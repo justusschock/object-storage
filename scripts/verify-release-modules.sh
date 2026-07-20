@@ -4,7 +4,6 @@ set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
 private_prefix=${PRIVATE_MODULE_PREFIX:-github.com/justusschock/go-}
-root_module=github.com/justusschock/go-object-storage
 
 export GOPRIVATE=${GOPRIVATE:-github.com/justusschock/*}
 export GONOSUMDB=${GONOSUMDB:-github.com/justusschock/*}
@@ -29,14 +28,10 @@ verify_module() {
 
 verify_module "${repo_root}"
 
-if GOWORK=off go list -m -json "${root_module}@v0.2.0" >/dev/null 2>&1; then
-	verify_module "${repo_root}/backend/s3"
-	exit 0
-fi
-
 temporary_directory=$(mktemp -d)
 trap 'rm -rf "${temporary_directory}"' EXIT
 mirror=${temporary_directory}/repository
+export GOMODCACHE=${temporary_directory}/gomodcache
 
 git clone --quiet --no-hardlinks "${repo_root}" "${mirror}"
 if tag_commit=$(git -C "${mirror}" rev-parse -q --verify 'refs/tags/v0.2.0^{}'); then
