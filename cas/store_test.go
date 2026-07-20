@@ -127,6 +127,23 @@ func TestPutReportsLeaseLoss(t *testing.T) {
 	}
 }
 
+func TestPutIgnoresKeepAliveCancellationAtCompletion(t *testing.T) {
+	lease := newCompletionLease()
+	objects := &completionRaceStore{Store: memory.New(), renewStarted: lease.renewStarted}
+	store, err := New(objects, "blobs", "sha256", nil, completionBackend{lease: lease}, "writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	digest, object, err := store.Put(context.Background(), strings.NewReader("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if object.SHA256 != [32]byte(digest) {
+		t.Fatalf("object SHA-256 = %x, want %x", object.SHA256, digest)
+	}
+}
+
 func TestNewAndPutRejectTypedNilInputs(t *testing.T) {
 	var objects *nilObjectStore
 	if _, err := New(objects, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer"); err == nil {
@@ -213,3 +230,74 @@ func (lease losingLease) Renew(context.Context, time.Duration) (coordination.Lea
 }
 
 func (losingLease) Release(context.Context) error { return coordination.ErrLeaseLost }
+
+type completionBackend struct{ lease *completionLease }
+
+func (backend completionBackend) Acquire(context.Context, coordination.AcquireRequest) (coordination.Lease, error) {
+	return backend.lease, nil
+}
+
+type completionRaceStore struct {
+	*memory.Store
+	renewStarted <-chan struct{}
+}
+
+func (store *completionRaceStore) Stat(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key) (objectstore.Object, error) {
+	select {
+	case <-ctx.Done():
+		return objectstore.Object{}, ctx.Err()
+	case <-store.renewStarted:
+		return store.Store.Stat(ctx, bucket, key)
+	}
+}
+
+type completionLease struct {
+	mu           sync.Mutex
+	info         coordination.LeaseInfo
+	done         chan struct{}
+	doneOnce     sync.Once
+	renewStarted chan struct{}
+	renewals     int
+}
+
+func newCompletionLease() *completionLease {
+	return &completionLease{
+		info: coordination.LeaseInfo{
+			Key:       "object-storage/cas/test",
+			Owner:     "writer",
+			Token:     1,
+			ExpiresAt: time.Now().Add(time.Minute),
+		},
+		done:         make(chan struct{}),
+		renewStarted: make(chan struct{}),
+	}
+}
+
+func (lease *completionLease) Info() coordination.LeaseInfo {
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	return lease.info
+}
+
+func (lease *completionLease) Done() <-chan struct{} { return lease.done }
+
+func (lease *completionLease) Renew(ctx context.Context, _ time.Duration) (coordination.LeaseInfo, error) {
+	lease.mu.Lock()
+	lease.renewals++
+	renewal := lease.renewals
+	info := lease.info
+	if renewal == 2 {
+		close(lease.renewStarted)
+	}
+	lease.mu.Unlock()
+	if renewal == 1 {
+		return info, nil
+	}
+	<-ctx.Done()
+	return info, ctx.Err()
+}
+
+func (lease *completionLease) Release(context.Context) error {
+	lease.doneOnce.Do(func() { close(lease.done) })
+	return nil
+}
