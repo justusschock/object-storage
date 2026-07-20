@@ -47,4 +47,7 @@ func TestCICompatibilityContract(t *testing.T) {
 	if strings.Contains(string(script), `go list -m -json "${root_module}@v0.2.0"`) {
 		t.Error("release module verifier may select an ambient cached root release instead of the exact candidate")
 	}
+	if !strings.Contains(string(script), `export GOMODCACHE=${temporary_directory}/gomodcache`) {
+		t.Error("release module verifier does not isolate the exact candidate from the ambient module cache")
+	}
 }
