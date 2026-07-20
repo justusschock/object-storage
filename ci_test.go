@@ -44,4 +44,7 @@ func TestCICompatibilityContract(t *testing.T) {
 	if !strings.Contains(string(script), "git cat-file -t") {
 		t.Error("release module verifier does not require an annotated tag")
 	}
+	if strings.Contains(string(script), `go list -m -json "${root_module}@v0.2.0"`) {
+		t.Error("release module verifier may select an ambient cached root release instead of the exact candidate")
+	}
 }
