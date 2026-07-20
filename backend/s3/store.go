@@ -4,13 +4,16 @@ package s3
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,7 +27,12 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
-const sha256MetadataKey = "go-object-storage-sha256"
+const (
+	sha256MetadataKey      = "go-object-storage-sha256"
+	multipartStagingPrefix = "/.go-object-storage/multipart/"
+	multipartTokenVersion  = 1
+	cleanupTimeout         = 10 * time.Second
+)
 
 type clientAPI interface {
 	GetObject(context.Context, *awss3.GetObjectInput, ...func(*awss3.Options)) (*awss3.GetObjectOutput, error)
@@ -35,6 +43,7 @@ type clientAPI interface {
 	UploadPart(context.Context, *awss3.UploadPartInput, ...func(*awss3.Options)) (*awss3.UploadPartOutput, error)
 	CompleteMultipartUpload(context.Context, *awss3.CompleteMultipartUploadInput, ...func(*awss3.Options)) (*awss3.CompleteMultipartUploadOutput, error)
 	AbortMultipartUpload(context.Context, *awss3.AbortMultipartUploadInput, ...func(*awss3.Options)) (*awss3.AbortMultipartUploadOutput, error)
+	ListParts(context.Context, *awss3.ListPartsInput, ...func(*awss3.Options)) (*awss3.ListPartsOutput, error)
 }
 
 type uploaderAPI interface {
@@ -80,11 +89,10 @@ func (store *Store) Put(ctx context.Context, bucket objectstore.Bucket, key obje
 		ContentType:       optionalString(options.ContentType),
 		Metadata:          metadata,
 		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
-		ChecksumSHA256:    stringPointer(base64.StdEncoding.EncodeToString(digest[:])),
 	}
 	applyPutConditions(input, options)
-	if _, err := store.uploader.Upload(ctx, input); err != nil {
-		return objectstore.Object{}, mapError(err)
+	if _, err := store.upload(ctx, input); err != nil {
+		return objectstore.Object{}, err
 	}
 	object, err := store.Stat(ctx, bucket, key)
 	if err != nil {
@@ -112,6 +120,21 @@ func (store *Store) Get(ctx context.Context, bucket objectstore.Bucket, key obje
 	output, err := store.client.GetObject(ctx, input)
 	if err != nil {
 		return nil, objectstore.Object{}, mapError(err)
+	}
+	if options.Range != nil {
+		if err := validateRangeResponse(output, *options.Range); err != nil {
+			_ = output.Body.Close()
+			return nil, objectstore.Object{}, err
+		}
+		data, readErr := io.ReadAll(contextReader{ctx: ctx, reader: output.Body})
+		closeErr := output.Body.Close()
+		if readErr != nil || closeErr != nil {
+			return nil, objectstore.Object{}, errors.Join(readErr, closeErr)
+		}
+		if int64(len(data)) != options.Range.Length {
+			return nil, objectstore.Object{}, objectstore.ErrInvalidRange
+		}
+		output.Body = io.NopCloser(bytes.NewReader(data))
 	}
 	object, hasDigest, err := objectFromGet(bucket, key, output)
 	if err != nil {
@@ -202,7 +225,7 @@ func (store *Store) List(ctx context.Context, bucket objectstore.Bucket, options
 			return objectstore.Page{}, mapError(err)
 		}
 		for _, listed := range output.Contents {
-			if listed.Key != nil {
+			if listed.Key != nil && !strings.HasPrefix(*listed.Key, multipartStagingPrefix) {
 				keys = append(keys, objectstore.Key(*listed.Key))
 			}
 		}
@@ -235,17 +258,22 @@ func (store *Store) List(ctx context.Context, bucket objectstore.Bucket, options
 	return page, nil
 }
 
-// BeginMultipart creates an S3 multipart upload with immutable option copies.
+// BeginMultipart creates an S3 multipart upload in an internal staging namespace.
 func (store *Store) BeginMultipart(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) (objectstore.Upload, error) {
 	if err := validateObjectInput(ctx, bucket, key); err != nil {
 		return objectstore.Upload{}, err
 	}
+	options = options.Clone()
 	metadata, err := metadataWithOptionalDigest(options.Metadata, options.SHA256)
 	if err != nil {
 		return objectstore.Upload{}, err
 	}
+	stagingKey, err := newMultipartStagingKey()
+	if err != nil {
+		return objectstore.Upload{}, err
+	}
 	output, err := store.client.CreateMultipartUpload(ctx, &awss3.CreateMultipartUploadInput{
-		Bucket: stringPointer(string(bucket)), Key: stringPointer(string(key)), ContentType: optionalString(options.ContentType),
+		Bucket: stringPointer(string(bucket)), Key: stringPointer(stagingKey), ContentType: optionalString(options.ContentType),
 		Metadata: metadata, ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
 	})
 	if err != nil {
@@ -254,12 +282,22 @@ func (store *Store) BeginMultipart(ctx context.Context, bucket objectstore.Bucke
 	if output.UploadId == nil || *output.UploadId == "" {
 		return objectstore.Upload{}, errors.New("s3 store: missing multipart upload ID")
 	}
-	return objectstore.Upload{ID: *output.UploadId, Bucket: bucket, Key: key, Options: options.Clone()}, nil
+	custody := multipartCustody{
+		Version: multipartTokenVersion, Bucket: bucket, Key: key, StagingKey: stagingKey,
+		UploadID: *output.UploadId, Options: options,
+	}
+	token, err := encodeMultipartCustody(custody)
+	if err != nil {
+		abortErr := store.abortUpload(ctx, bucket, stagingKey, *output.UploadId)
+		return objectstore.Upload{}, errors.Join(err, abortErr)
+	}
+	return objectstore.Upload{ID: token, Bucket: bucket, Key: key, Options: options.Clone()}, nil
 }
 
 // PutPart uploads and verifies one numbered multipart part.
 func (store *Store) PutPart(ctx context.Context, upload objectstore.Upload, number int, body io.Reader, size int64, digest [32]byte) (objectstore.CompletedPart, error) {
-	if err := validateUpload(ctx, upload); err != nil {
+	custody, err := decodeMultipartCustody(ctx, upload)
+	if err != nil {
 		return objectstore.CompletedPart{}, err
 	}
 	if number <= 0 || number > 10000 || size < 0 {
@@ -275,7 +313,7 @@ func (store *Store) PutPart(ctx context.Context, upload objectstore.Upload, numb
 	}
 	encoded := base64.StdEncoding.EncodeToString(digest[:])
 	output, err := store.client.UploadPart(ctx, &awss3.UploadPartInput{
-		Bucket: stringPointer(string(upload.Bucket)), Key: stringPointer(string(upload.Key)), UploadId: stringPointer(upload.ID),
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), UploadId: stringPointer(custody.UploadID),
 		PartNumber: int32Pointer(int32(number)), Body: bytes.NewReader(data), ContentLength: int64Pointer(size),
 		ChecksumAlgorithm: types.ChecksumAlgorithmSha256, ChecksumSHA256: stringPointer(encoded),
 	})
@@ -288,10 +326,16 @@ func (store *Store) PutPart(ctx context.Context, upload objectstore.Upload, numb
 	return objectstore.CompletedPart{Number: number, ETag: *output.ETag, Size: size, SHA256: digest}, nil
 }
 
-// CompleteMultipart validates ordering and atomically applies write preconditions.
+// CompleteMultipart verifies staged bytes before atomically publishing the final key.
 func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Upload, completed []objectstore.CompletedPart) (objectstore.Object, error) {
-	if err := validateUpload(ctx, upload); err != nil {
+	custody, err := decodeMultipartCustody(ctx, upload)
+	if err != nil {
 		return objectstore.Object{}, err
+	}
+	if _, err := store.client.ListParts(ctx, &awss3.ListPartsInput{
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), UploadId: stringPointer(custody.UploadID), MaxParts: int32Pointer(1),
+	}); err != nil {
+		return objectstore.Object{}, mapError(err)
 	}
 	if len(completed) == 0 || len(completed) > 10000 {
 		return objectstore.Object{}, objectstore.ErrInvalidPart
@@ -309,46 +353,211 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 		}
 	}
 	input := &awss3.CompleteMultipartUploadInput{
-		Bucket: stringPointer(string(upload.Bucket)), Key: stringPointer(string(upload.Key)), UploadId: stringPointer(upload.ID),
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), UploadId: stringPointer(custody.UploadID),
 		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts}, MpuObjectSize: int64Pointer(total),
 	}
-	if upload.Options.IfAbsent {
-		input.IfNoneMatch = stringPointer("*")
-	}
-	input.IfMatch = optionalString(upload.Options.IfMatchVersion)
 	output, err := store.client.CompleteMultipartUpload(ctx, input)
 	if err != nil {
 		return objectstore.Object{}, mapError(err)
 	}
-	object, err := store.Stat(ctx, upload.Bucket, upload.Key)
+	file, size, digest, err := store.spoolStagedObject(ctx, custody, optionalDereference(output.ETag))
 	if err != nil {
 		return objectstore.Object{}, err
 	}
-	if upload.Options.SHA256 != nil {
-		actual, verifyErr := store.loadDigest(ctx, upload.Bucket, upload.Key, object.Version)
-		if verifyErr != nil {
-			return objectstore.Object{}, verifyErr
-		}
-		if actual != *upload.Options.SHA256 {
-			if output.ETag != nil {
-				_ = store.Delete(ctx, upload.Bucket, upload.Key, *output.ETag)
-			}
-			return objectstore.Object{}, objectstore.ErrPrecondition
-		}
-		object.SHA256 = actual
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
+	if size != total {
+		return objectstore.Object{}, errors.New("s3 store: staged multipart size mismatch")
+	}
+	if custody.Options.SHA256 != nil && digest != *custody.Options.SHA256 {
+		cleanupErr := store.deleteStagedObject(ctx, custody, optionalDereference(output.ETag))
+		return objectstore.Object{}, errors.Join(objectstore.ErrPrecondition, cleanupErr)
+	}
+	metadata, err := metadataWithDigest(custody.Options.Metadata, digest)
+	if err != nil {
+		return objectstore.Object{}, err
+	}
+	finalInput := &awss3.PutObjectInput{
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(string(custody.Key)), Body: file,
+		ContentLength: int64Pointer(size), ContentType: optionalString(custody.Options.ContentType), Metadata: metadata,
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+	}
+	applyPutConditions(finalInput, custody.Options)
+	if _, err := store.upload(ctx, finalInput); err != nil {
+		return objectstore.Object{}, err
+	}
+	object, err := store.Stat(ctx, custody.Bucket, custody.Key)
+	if err != nil {
+		return objectstore.Object{}, err
+	}
+	if object.Size != size || object.SHA256 != digest {
+		return objectstore.Object{}, errors.New("s3 store: published multipart metadata mismatch")
+	}
+	if err := store.deleteStagedObject(ctx, custody, optionalDereference(output.ETag)); err != nil {
+		return objectstore.Object{}, err
 	}
 	return object, nil
 }
 
 // AbortMultipart removes one active S3 upload.
 func (store *Store) AbortMultipart(ctx context.Context, upload objectstore.Upload) error {
-	if err := validateUpload(ctx, upload); err != nil {
+	custody, err := decodeMultipartCustody(ctx, upload)
+	if err != nil {
 		return err
 	}
-	_, err := store.client.AbortMultipartUpload(ctx, &awss3.AbortMultipartUploadInput{
-		Bucket: stringPointer(string(upload.Bucket)), Key: stringPointer(string(upload.Key)), UploadId: stringPointer(upload.ID),
+	return store.abortUpload(ctx, custody.Bucket, custody.StagingKey, custody.UploadID)
+}
+
+type multipartCustody struct {
+	Version    int                    `json:"version"`
+	Bucket     objectstore.Bucket     `json:"bucket"`
+	Key        objectstore.Key        `json:"key"`
+	StagingKey string                 `json:"staging_key"`
+	UploadID   string                 `json:"upload_id"`
+	Options    objectstore.PutOptions `json:"options"`
+}
+
+func newMultipartStagingKey() (string, error) {
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return "", fmt.Errorf("s3 store: create multipart identity: %w", err)
+	}
+	return multipartStagingPrefix + hex.EncodeToString(nonce[:]), nil
+}
+
+func encodeMultipartCustody(custody multipartCustody) (string, error) {
+	data, err := json.Marshal(custody)
+	if err != nil {
+		return "", fmt.Errorf("s3 store: encode multipart custody: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeMultipartCustody(ctx context.Context, upload objectstore.Upload) (multipartCustody, error) {
+	if err := validateUpload(ctx, upload); err != nil {
+		return multipartCustody{}, err
+	}
+	data, err := base64.RawURLEncoding.DecodeString(upload.ID)
+	if err != nil {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
+	var custody multipartCustody
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&custody); err != nil {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
+	canonical, err := encodeMultipartCustody(custody)
+	if err != nil || canonical != upload.ID || custody.Version != multipartTokenVersion ||
+		custody.Bucket != upload.Bucket || custody.Key != upload.Key || custody.UploadID == "" ||
+		!strings.HasPrefix(custody.StagingKey, multipartStagingPrefix) {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
+	if _, err := metadataWithOptionalDigest(custody.Options.Metadata, custody.Options.SHA256); err != nil {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
+	custody.Options = custody.Options.Clone()
+	return custody, nil
+}
+
+func (store *Store) upload(ctx context.Context, input *awss3.PutObjectInput) (*manager.UploadOutput, error) {
+	output, err := store.uploader.Upload(ctx, input)
+	if err == nil {
+		return output, nil
+	}
+	mapped := mapError(err)
+	var failure manager.MultiUploadFailure
+	if !errors.As(err, &failure) || failure.UploadID() == "" {
+		return nil, mapped
+	}
+	abortErr := store.abortUpload(ctx, objectstore.Bucket(*input.Bucket), *input.Key, failure.UploadID())
+	if abortErr == nil || errors.Is(abortErr, objectstore.ErrNotFound) {
+		return nil, mapped
+	}
+	return nil, errors.Join(mapped, fmt.Errorf("s3 store: abort failed multipart upload: %w", abortErr))
+}
+
+func (store *Store) abortUpload(ctx context.Context, bucket objectstore.Bucket, key string, uploadID string) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	_, err := store.client.AbortMultipartUpload(cleanupCtx, &awss3.AbortMultipartUploadInput{
+		Bucket: stringPointer(string(bucket)), Key: stringPointer(key), UploadId: stringPointer(uploadID),
 	})
 	return mapError(err)
+}
+
+func (store *Store) deleteStagedObject(ctx context.Context, custody multipartCustody, etag string) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	_, err := store.client.DeleteObject(cleanupCtx, &awss3.DeleteObjectInput{
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), IfMatch: optionalString(etag),
+	})
+	err = mapError(err)
+	if errors.Is(err, objectstore.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
+func (store *Store) spoolStagedObject(ctx context.Context, custody multipartCustody, etag string) (*os.File, int64, [sha256.Size]byte, error) {
+	output, err := store.client.GetObject(ctx, &awss3.GetObjectInput{
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), IfMatch: optionalString(etag),
+	})
+	if err != nil {
+		return nil, 0, [sha256.Size]byte{}, mapError(err)
+	}
+	if output == nil || output.Body == nil {
+		return nil, 0, [sha256.Size]byte{}, errors.New("s3 store: incomplete staged object response")
+	}
+	file, err := os.CreateTemp("", "go-object-storage-s3-*")
+	if err != nil {
+		_ = output.Body.Close()
+		return nil, 0, [sha256.Size]byte{}, err
+	}
+	fail := func(err error) (*os.File, int64, [sha256.Size]byte, error) {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return nil, 0, [sha256.Size]byte{}, err
+	}
+	hash := sha256.New()
+	size, copyErr := io.Copy(io.MultiWriter(file, hash), contextReader{ctx: ctx, reader: output.Body})
+	closeErr := output.Body.Close()
+	if copyErr != nil || closeErr != nil {
+		return fail(errors.Join(copyErr, closeErr))
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return fail(err)
+	}
+	var digest [sha256.Size]byte
+	copy(digest[:], hash.Sum(nil))
+	return file, size, digest, nil
+}
+
+func validateRangeResponse(output *awss3.GetObjectOutput, requested objectstore.ByteRange) error {
+	if output == nil || output.Body == nil || output.ContentLength == nil || output.ContentRange == nil || *output.ContentLength != requested.Length {
+		return objectstore.ErrInvalidRange
+	}
+	value := *output.ContentRange
+	if !strings.HasPrefix(value, "bytes ") {
+		return objectstore.ErrInvalidRange
+	}
+	span, totalValue, found := strings.Cut(strings.TrimPrefix(value, "bytes "), "/")
+	startValue, endValue, spanFound := strings.Cut(span, "-")
+	start, startErr := strconv.ParseInt(startValue, 10, 64)
+	end, endErr := strconv.ParseInt(endValue, 10, 64)
+	total, totalErr := strconv.ParseInt(totalValue, 10, 64)
+	wantEnd := requested.Offset + requested.Length - 1
+	if !found || !spanFound || startErr != nil || endErr != nil || totalErr != nil ||
+		start != requested.Offset || end != wantEnd || total <= end {
+		return objectstore.ErrInvalidRange
+	}
+	return nil
 }
 
 func (store *Store) loadDigest(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, version string) ([sha256.Size]byte, error) {
@@ -471,6 +680,8 @@ func mapError(err error) error {
 			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
 		case "InvalidRange", "RequestedRangeNotSatisfiable":
 			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+		case "InvalidPart", "InvalidPartOrder", "EntityTooSmall", "TooManyParts":
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err)
 		}
 	}
 	var responseError *smithyhttp.ResponseError
@@ -518,6 +729,13 @@ func optionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func optionalDereference(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func stringPointer(value string) *string { return &value }
