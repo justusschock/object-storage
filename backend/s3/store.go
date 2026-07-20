@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -264,6 +265,9 @@ func (store *Store) BeginMultipart(ctx context.Context, bucket objectstore.Bucke
 		return objectstore.Upload{}, err
 	}
 	options = options.Clone()
+	if err := validateMultipartInputStrings(bucket, key, options); err != nil {
+		return objectstore.Upload{}, err
+	}
 	metadata, err := metadataWithOptionalDigest(options.Metadata, options.SHA256)
 	if err != nil {
 		return objectstore.Upload{}, err
@@ -332,10 +336,20 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 	if err != nil {
 		return objectstore.Object{}, err
 	}
+	active := true
+	stagingETag := ""
 	if _, err := store.client.ListParts(ctx, &awss3.ListPartsInput{
 		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), UploadId: stringPointer(custody.UploadID), MaxParts: int32Pointer(1),
 	}); err != nil {
-		return objectstore.Object{}, mapError(err)
+		mapped := mapError(err)
+		if !errors.Is(mapped, objectstore.ErrNotFound) {
+			return objectstore.Object{}, mapped
+		}
+		active = false
+		stagingETag, err = store.stagedObjectETag(ctx, custody)
+		if err != nil {
+			return objectstore.Object{}, err
+		}
 	}
 	if len(completed) == 0 || len(completed) > 10000 {
 		return objectstore.Object{}, objectstore.ErrInvalidPart
@@ -356,11 +370,28 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey), UploadId: stringPointer(custody.UploadID),
 		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts}, MpuObjectSize: int64Pointer(total),
 	}
-	output, err := store.client.CompleteMultipartUpload(ctx, input)
-	if err != nil {
-		return objectstore.Object{}, mapError(err)
+	if active {
+		output, completeErr := store.client.CompleteMultipartUpload(ctx, input)
+		if completeErr != nil {
+			mapped := mapError(completeErr)
+			if !errors.Is(mapped, objectstore.ErrNotFound) {
+				return objectstore.Object{}, mapped
+			}
+			stagingETag, err = store.stagedObjectETag(ctx, custody)
+			if err != nil {
+				return objectstore.Object{}, err
+			}
+		} else {
+			stagingETag = optionalDereference(output.ETag)
+			if stagingETag == "" {
+				stagingETag, err = store.stagedObjectETag(ctx, custody)
+				if err != nil {
+					return objectstore.Object{}, err
+				}
+			}
+		}
 	}
-	file, size, digest, err := store.spoolStagedObject(ctx, custody, optionalDereference(output.ETag))
+	file, size, digest, err := store.spoolStagedObject(ctx, custody, stagingETag)
 	if err != nil {
 		return objectstore.Object{}, err
 	}
@@ -372,7 +403,7 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 		return objectstore.Object{}, errors.New("s3 store: staged multipart size mismatch")
 	}
 	if custody.Options.SHA256 != nil && digest != *custody.Options.SHA256 {
-		cleanupErr := store.deleteStagedObject(ctx, custody, optionalDereference(output.ETag))
+		cleanupErr := store.deleteStagedObject(ctx, custody, stagingETag)
 		return objectstore.Object{}, errors.Join(objectstore.ErrPrecondition, cleanupErr)
 	}
 	metadata, err := metadataWithDigest(custody.Options.Metadata, digest)
@@ -395,7 +426,7 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 	if object.Size != size || object.SHA256 != digest {
 		return objectstore.Object{}, errors.New("s3 store: published multipart metadata mismatch")
 	}
-	if err := store.deleteStagedObject(ctx, custody, optionalDereference(output.ETag)); err != nil {
+	if err := store.deleteStagedObject(ctx, custody, stagingETag); err != nil {
 		return objectstore.Object{}, err
 	}
 	return object, nil
@@ -428,6 +459,10 @@ func newMultipartStagingKey() (string, error) {
 }
 
 func encodeMultipartCustody(custody multipartCustody) (string, error) {
+	if err := validateMultipartInputStrings(custody.Bucket, custody.Key, custody.Options); err != nil ||
+		!utf8.ValidString(custody.StagingKey) || !utf8.ValidString(custody.UploadID) {
+		return "", errors.New("s3 store: multipart custody contains invalid UTF-8")
+	}
 	data, err := json.Marshal(custody)
 	if err != nil {
 		return "", fmt.Errorf("s3 store: encode multipart custody: %w", err)
@@ -462,8 +497,30 @@ func decodeMultipartCustody(ctx context.Context, upload objectstore.Upload) (mul
 	if _, err := metadataWithOptionalDigest(custody.Options.Metadata, custody.Options.SHA256); err != nil {
 		return multipartCustody{}, objectstore.ErrInvalidPart
 	}
+	if err := validateMultipartInputStrings(custody.Bucket, custody.Key, custody.Options); err != nil ||
+		!utf8.ValidString(custody.StagingKey) || !utf8.ValidString(custody.UploadID) {
+		return multipartCustody{}, objectstore.ErrInvalidPart
+	}
 	custody.Options = custody.Options.Clone()
 	return custody, nil
+}
+
+func validateMultipartInputStrings(bucket objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) error {
+	if !utf8.ValidString(string(bucket)) {
+		return fmt.Errorf("%w: invalid UTF-8", objectstore.ErrInvalidBucket)
+	}
+	if !utf8.ValidString(string(key)) {
+		return fmt.Errorf("%w: invalid UTF-8", objectstore.ErrInvalidKey)
+	}
+	if !utf8.ValidString(options.ContentType) || !utf8.ValidString(options.IfMatchVersion) {
+		return errors.New("s3 store: multipart options contain invalid UTF-8")
+	}
+	for key, value := range options.Metadata {
+		if !utf8.ValidString(key) || !utf8.ValidString(value) {
+			return errors.New("s3 store: multipart metadata contains invalid UTF-8")
+		}
+	}
+	return nil
 }
 
 func (store *Store) upload(ctx context.Context, input *awss3.PutObjectInput) (*manager.UploadOutput, error) {
@@ -503,6 +560,19 @@ func (store *Store) deleteStagedObject(ctx context.Context, custody multipartCus
 		return nil
 	}
 	return err
+}
+
+func (store *Store) stagedObjectETag(ctx context.Context, custody multipartCustody) (string, error) {
+	output, err := store.client.HeadObject(ctx, &awss3.HeadObjectInput{
+		Bucket: stringPointer(string(custody.Bucket)), Key: stringPointer(custody.StagingKey),
+	})
+	if err != nil {
+		return "", mapError(err)
+	}
+	if output == nil || output.ETag == nil || *output.ETag == "" {
+		return "", objectstore.ErrNotFound
+	}
+	return *output.ETag, nil
 }
 
 func (store *Store) spoolStagedObject(ctx context.Context, custody multipartCustody, etag string) (*os.File, int64, [sha256.Size]byte, error) {
