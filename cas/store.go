@@ -115,7 +115,11 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	}()
 	defer func() {
 		stopFill(errFillComplete)
-		if keepAliveErr := <-keepAliveResult; keepAliveErr != nil && !errors.Is(keepAliveErr, errFillComplete) {
+		keepAliveErr := <-keepAliveResult
+		if errors.Is(context.Cause(fillCtx), errFillComplete) && errors.Is(keepAliveErr, context.Canceled) {
+			keepAliveErr = nil
+		}
+		if keepAliveErr != nil && !errors.Is(keepAliveErr, errFillComplete) {
 			returnErr = errors.Join(returnErr, fmt.Errorf("cas: keep lease alive: %w", keepAliveErr))
 		}
 	}()
