@@ -29,7 +29,7 @@ verify_module() {
 verify_module "${repo_root}"
 
 temporary_directory=$(mktemp -d)
-trap 'rm -rf "${temporary_directory}"' EXIT
+trap 'GOMODCACHE="${temporary_directory}/gomodcache" go clean -modcache; rm -rf "${temporary_directory}"' EXIT
 mirror=${temporary_directory}/repository
 export GOMODCACHE=${temporary_directory}/gomodcache
 
