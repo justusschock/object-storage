@@ -36,3 +36,5 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.38.6 h1:p3jIvqYwUZgu/XYeI48bJxOhvm47
 github.com/aws/aws-sdk-go-v2/service/sts v1.38.6/go.mod h1:WtKK+ppze5yKPkZ0XwqIVWD4beCwv056ZbPQNoeHqM8=
 github.com/aws/smithy-go v1.23.0 h1:8n6I3gXzWJB2DxBDnfxgBaSX6oe0d/t10qGz7OKqMCE=
 github.com/aws/smithy-go v1.23.0/go.mod h1:t1ufH5HMublsJYulve2RKmHDC15xu1f26kHCp/HgceI=
+github.com/justusschock/go-object-storage v0.2.0 h1:WTHncp2y7+I2KS6WM7n4co8hEZUEkp9t4YNZ7Os996k=
+github.com/justusschock/go-object-storage v0.2.0/go.mod h1:Ns+mNUyqWEnCV/wk1nawRiLFRpfhdaN+fMVbjcpF/CI=
