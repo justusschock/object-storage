@@ -40,6 +40,8 @@ mirror=${temporary_directory}/repository
 
 git clone --quiet --no-hardlinks "${repo_root}" "${mirror}"
 if tag_commit=$(git -C "${mirror}" rev-parse -q --verify 'refs/tags/v0.2.0^{}'); then
+	tag_type=$(GIT_DIR="${mirror}/.git" git cat-file -t refs/tags/v0.2.0)
+	test "${tag_type}" = tag
 	test "${tag_commit}" = "$(git -C "${mirror}" rev-parse HEAD)"
 else
 	git -C "${mirror}" \
