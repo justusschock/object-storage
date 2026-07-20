@@ -37,4 +37,11 @@ func TestCICompatibilityContract(t *testing.T) {
 	if info.Mode()&0o111 == 0 {
 		t.Error("release module verifier is not executable")
 	}
+	script, err := os.ReadFile("scripts/verify-release-modules.sh")
+	if err != nil {
+		t.Fatalf("read release module verifier: %v", err)
+	}
+	if !strings.Contains(string(script), "git cat-file -t") {
+		t.Error("release module verifier does not require an annotated tag")
+	}
 }
