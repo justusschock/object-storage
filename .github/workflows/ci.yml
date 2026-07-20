@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/justusschock/*
+  GONOSUMDB: github.com/justusschock/*
+  PRIVATE_MODULE_PREFIX: github.com/justusschock/go-
+
+jobs:
+  test:
+    name: Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - '1.22.x'
+          - '1.23.x'
+          - '1.24.x'
+          - '1.25.x'
+          - '1.26.x'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            backend/s3/go.sum
+
+      - name: Configure private module authentication
+        env:
+          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "${GO_MODULES_TOKEN}"
+          umask 077
+          printf 'machine github.com\nlogin x-access-token\npassword %s\n' "${GO_MODULES_TOKEN}" > "${HOME}/.netrc"
+
+      - name: Verify repository policy
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)go\.work$'; then
+            echo 'committed go.work files are forbidden'
+            exit 1
+          fi
+          if grep -En '^replace([[:space:]]|$)' go.mod backend/s3/go.mod; then
+            echo 'committed replace directives are forbidden'
+            exit 1
+          fi
+
+      - name: Verify root module
+        run: |
+          go mod download
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Verify root private versions and dependency boundary
+        shell: bash
+        run: |
+          set -o pipefail
+          go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" { print; bad=1 } END { exit bad }'
+          if go list -deps ./... | grep -Ei 'aws-sdk'; then
+            echo 'root module imports AWS SDK packages'
+            exit 1
+          fi
+
+      - name: Test root module
+        run: go test ./...
+
+      - name: Race-test root module
+        run: go test -race ./...
+
+      - name: Vet root module
+        run: go vet ./...
+
+      - name: Verify S3 module
+        working-directory: backend/s3
+        run: |
+          go mod download
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Verify S3 private versions
+        working-directory: backend/s3
+        shell: bash
+        run: |
+          set -o pipefail
+          go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" { print; bad=1 } END { exit bad }'
+
+      - name: Test S3 module
+        working-directory: backend/s3
+        run: go test ./...
+
+      - name: Compile integration contract
+        working-directory: backend/s3
+        run: go test -tags=integration ./...
+
+      - name: Race-test S3 module
+        working-directory: backend/s3
+        run: go test -race ./...
+
+      - name: Vet S3 module
+        working-directory: backend/s3
+        run: go vet ./...
