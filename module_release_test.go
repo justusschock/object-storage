@@ -18,6 +18,7 @@ func TestReleaseModuleChecksums(t *testing.T) {
 				"github.com/justusschock/go-concurrency",
 				"github.com/justusschock/go-distributed-coordination",
 				"github.com/justusschock/go-lifecycle",
+				"github.com/justusschock/go-messaging",
 			},
 		},
 		{
@@ -35,6 +36,19 @@ func TestReleaseModuleChecksums(t *testing.T) {
 		for _, module := range test.modules {
 			if !strings.Contains(string(data), module+" v0.2.0 h1:") {
 				t.Errorf("%s is missing the %s v0.2.0 module checksum", test.path, module)
+			}
+			if !strings.Contains(string(data), module+" v0.2.0/go.mod h1:") {
+				t.Errorf("%s is missing the %s v0.2.0 go.mod checksum", test.path, module)
+			}
+		}
+
+		for _, line := range strings.Split(string(data), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 || !strings.HasPrefix(fields[0], "github.com/justusschock/go-") {
+				continue
+			}
+			if fields[1] != "v0.2.0" && fields[1] != "v0.2.0/go.mod" {
+				t.Errorf("%s contains non-v0.2.0 private dependency %s %s", test.path, fields[0], fields[1])
 			}
 		}
 	}

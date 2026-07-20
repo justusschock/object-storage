@@ -18,6 +18,7 @@ func TestCICompatibilityContract(t *testing.T) {
 		"go mod download", "go mod verify", "go mod tidy", "git diff --exit-code -- go.mod go.sum",
 		"go test ./...", "go test -race ./...", "go test -tags=integration ./...", "go vet ./...",
 		"working-directory: backend/s3", "github.com/justusschock/go-", "v0.2.0", "aws-sdk",
+		"./scripts/verify-release-modules.sh",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("CI workflow is missing %q", required)
@@ -27,5 +28,13 @@ func TestCICompatibilityContract(t *testing.T) {
 		if strings.Contains(workflow, forbidden) {
 			t.Errorf("CI workflow contains unsafe or forbidden fragment %q", forbidden)
 		}
+	}
+
+	info, err := os.Stat("scripts/verify-release-modules.sh")
+	if err != nil {
+		t.Fatalf("stat release module verifier: %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Error("release module verifier is not executable")
 	}
 }
