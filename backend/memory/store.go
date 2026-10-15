@@ -56,6 +56,9 @@ func (store *Store) Put(ctx context.Context, bucket objectstore.Bucket, key obje
 	if err := validateObjectInput(ctx, bucket, key); err != nil {
 		return objectstore.Object{}, err
 	}
+	if err := options.ValidateSize(); err != nil {
+		return objectstore.Object{}, err
+	}
 	data, err := readAll(ctx, body)
 	if err != nil {
 		return objectstore.Object{}, err
@@ -63,6 +66,9 @@ func (store *Store) Put(ctx context.Context, bucket objectstore.Bucket, key obje
 	digest := sha256.Sum256(data)
 	if options.SHA256 != nil && *options.SHA256 != digest {
 		return objectstore.Object{}, objectstore.ErrPrecondition
+	}
+	if options.Size > 0 && options.Size != int64(len(data)) {
+		return objectstore.Object{}, fmt.Errorf("%w: size mismatch", objectstore.ErrPrecondition)
 	}
 	if err := ctx.Err(); err != nil {
 		return objectstore.Object{}, err
@@ -151,7 +157,7 @@ func (store *Store) Delete(ctx context.Context, bucket objectstore.Bucket, key o
 	return nil
 }
 
-// List returns a stable key-ordered page.
+// List returns a stable key-ordered page with full metadata.
 func (store *Store) List(ctx context.Context, bucket objectstore.Bucket, options objectstore.ListOptions) (objectstore.Page, error) {
 	if err := ctx.Err(); err != nil {
 		return objectstore.Page{}, err
@@ -319,6 +325,90 @@ func (store *Store) AbortMultipart(ctx context.Context, upload objectstore.Uploa
 	return nil
 }
 
+// StatMany returns independently owned metadata for every key in input order.
+func (store *Store) StatMany(ctx context.Context, bucket objectstore.Bucket, keys []objectstore.Key) ([]objectstore.StatResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := objectstore.ValidateBucket(bucket); err != nil {
+		return nil, err
+	}
+	results := make([]objectstore.StatResult, len(keys))
+	store.mu.RLock()
+	for index, key := range keys {
+		if err := objectstore.ValidateKey(key); err != nil {
+			results[index].Err = err
+			continue
+		}
+		stored, ok := store.objectLocked(bucket, key)
+		if !ok {
+			results[index].Err = objectstore.ErrNotFound
+			continue
+		}
+		results[index].Object = stored.object.Clone()
+	}
+	store.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// DeleteMany atomically removes every listed key; absent keys succeed.
+func (store *Store) DeleteMany(ctx context.Context, bucket objectstore.Bucket, keys []objectstore.Key) ([]error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := objectstore.ValidateBucket(bucket); err != nil {
+		return nil, err
+	}
+	results := make([]error, len(keys))
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for index, key := range keys {
+		if err := objectstore.ValidateKey(key); err != nil {
+			results[index] = err
+			continue
+		}
+		delete(store.objects[bucket], key)
+	}
+	if len(store.objects[bucket]) == 0 {
+		delete(store.objects, bucket)
+	}
+	return results, nil
+}
+
+// Copy atomically publishes a source object's bytes under a destination key.
+func (store *Store) Copy(ctx context.Context, srcBucket objectstore.Bucket, srcKey objectstore.Key, dstBucket objectstore.Bucket, dstKey objectstore.Key, options objectstore.CopyOptions) (objectstore.Object, error) {
+	if err := errors.Join(validateObjectInput(ctx, srcBucket, srcKey), validateObjectInput(ctx, dstBucket, dstKey)); err != nil {
+		return objectstore.Object{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	source, ok := store.objectLocked(srcBucket, srcKey)
+	if !ok {
+		return objectstore.Object{}, objectstore.ErrNotFound
+	}
+	if options.SourceVersion != "" && options.SourceVersion != source.object.Version {
+		return objectstore.Object{}, objectstore.ErrPrecondition
+	}
+	if err := ctx.Err(); err != nil {
+		return objectstore.Object{}, err
+	}
+	metadata := source.object.Metadata
+	if options.Metadata != nil {
+		metadata = options.Metadata
+	}
+	return store.putLocked(dstBucket, dstKey, source.data, source.object.SHA256, objectstore.PutOptions{
+		Metadata:       metadata,
+		IfAbsent:       options.IfAbsent,
+		IfMatchVersion: options.IfMatchVersion,
+	})
+}
+
 func (store *Store) putLocked(bucket objectstore.Bucket, key objectstore.Key, data []byte, digest [32]byte, options objectstore.PutOptions) (objectstore.Object, error) {
 	current, exists := store.objectLocked(bucket, key)
 	if options.IfAbsent && exists {
@@ -330,14 +420,15 @@ func (store *Store) putLocked(bucket objectstore.Bucket, key objectstore.Key, da
 	store.nextVersion++
 	version := strconv.FormatUint(store.nextVersion, 10)
 	object := objectstore.Object{
-		Bucket:     bucket,
-		Key:        key,
-		Version:    version,
-		ETag:       hex.EncodeToString(digest[:]),
-		Size:       int64(len(data)),
-		ModifiedAt: time.Now().UTC(),
-		SHA256:     digest,
-		Metadata:   options.Clone().Metadata,
+		Bucket:      bucket,
+		Key:         key,
+		Version:     version,
+		ETag:        hex.EncodeToString(digest[:]),
+		Size:        int64(len(data)),
+		ModifiedAt:  time.Now().UTC(),
+		SHA256:      digest,
+		SHA256Known: true,
+		Metadata:    options.Clone().Metadata,
 	}
 	if store.objects[bucket] == nil {
 		store.objects[bucket] = make(map[objectstore.Key]record)
@@ -392,4 +483,9 @@ func readAll(ctx context.Context, reader io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-var _ objectstore.MultipartStore = (*Store)(nil)
+var (
+	_ objectstore.MultipartStore = (*Store)(nil)
+	_ objectstore.BatchStater    = (*Store)(nil)
+	_ objectstore.BatchDeleter   = (*Store)(nil)
+	_ objectstore.Copier         = (*Store)(nil)
+)

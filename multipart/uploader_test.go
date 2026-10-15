@@ -102,6 +102,7 @@ type recordingMultipart struct {
 	failPart      int
 	abortErr      error
 	completed     []objectstore.CompletedPart
+	beginOptions  objectstore.PutOptions
 	beginCalls    int
 	completeCalls int
 	abortCalls    int
@@ -110,6 +111,7 @@ type recordingMultipart struct {
 func (backend *recordingMultipart) BeginMultipart(_ context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.PutOptions) (objectstore.Upload, error) {
 	backend.mu.Lock()
 	backend.beginCalls++
+	backend.beginOptions = options.Clone()
 	backend.mu.Unlock()
 	return objectstore.Upload{ID: "upload", Bucket: bucket, Key: key, Options: options.Clone()}, nil
 }
@@ -178,4 +180,33 @@ func slicesEqual(left, right []int) bool {
 		}
 	}
 	return true
+}
+
+func TestUploaderDeclaresVerifiedWholeObjectDigest(t *testing.T) {
+	data := bytes.Repeat([]byte("digest"), 3000)
+	backend := &recordingMultipart{}
+	uploader, err := newUploader(backend, Options{PartSize: 4096, MaxParallel: 2}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := uploader.UploadReaderAt(context.Background(), "bucket", "key", bytes.NewReader(data), int64(len(data)), objectstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	want := sha256.Sum256(data)
+	if backend.beginOptions.SHA256 == nil || *backend.beginOptions.SHA256 != want || backend.beginOptions.Size != int64(len(data)) {
+		t.Fatalf("BeginMultipart options = %#v, want declared digest and size", backend.beginOptions)
+	}
+
+	wrong := sha256.Sum256([]byte("wrong"))
+	rejecting := &recordingMultipart{}
+	uploader, err = newUploader(rejecting, Options{PartSize: 4096, MaxParallel: 2}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := uploader.UploadReaderAt(context.Background(), "bucket", "key", bytes.NewReader(data), int64(len(data)), objectstore.PutOptions{SHA256: &wrong}); !errors.Is(err, objectstore.ErrPrecondition) {
+		t.Fatalf("UploadReaderAt wrong digest error = %v, want ErrPrecondition", err)
+	}
+	if rejecting.beginCalls != 0 {
+		t.Fatalf("wrong digest began %d uploads", rejecting.beginCalls)
+	}
 }

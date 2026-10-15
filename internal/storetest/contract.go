@@ -18,7 +18,10 @@ import (
 // Factory returns a fresh empty store for one conformance case.
 type Factory func(*testing.T) objectstore.MultipartStore
 
-// Run verifies the complete Store and MultipartStore contract.
+// Run verifies the complete Store and MultipartStore contract, then every
+// optional capability (BatchStater, BatchDeleter, Copier, Presigner) that the
+// factory's stores implement. Stores must accept the buckets "objects" and
+// "objects-copy".
 func Run(t *testing.T, factory Factory) {
 	t.Helper()
 	t.Run("put get and stat", func(t *testing.T) { testPutGetStat(t, factory(t)) })
@@ -31,6 +34,12 @@ func Run(t *testing.T, factory Factory) {
 	t.Run("multipart abort", func(t *testing.T) { testMultipartAbort(t, factory(t)) })
 	t.Run("context cancellation", func(t *testing.T) { testContextCancellation(t, factory(t)) })
 	t.Run("defensive metadata copies", func(t *testing.T) { testDefensiveCopies(t, factory(t)) })
+	t.Run("if match version", func(t *testing.T) { testIfMatchVersion(t, factory(t)) })
+	t.Run("concurrent compare and swap", func(t *testing.T) { testConcurrentCompareAndSwap(t, factory(t)) })
+	t.Run("size option", func(t *testing.T) { testSizeOption(t, factory(t)) })
+	t.Run("streaming put", func(t *testing.T) { testStreamingPut(t, factory(t)) })
+	t.Run("list metadata", func(t *testing.T) { testListMetadata(t, factory(t)) })
+	runCapabilities(t, factory)
 }
 
 func testPutGetStat(t *testing.T, store objectstore.MultipartStore) {
@@ -47,7 +56,7 @@ func testPutGetStat(t *testing.T, store objectstore.MultipartStore) {
 	metadata["owner"] = "mutated"
 	wantDigest := sha256.Sum256(input)
 	if object.Bucket != "objects" || object.Key != "path/value" || object.Version == "" || object.ETag == "" ||
-		object.Size != int64(len(input)) || object.SHA256 != wantDigest || object.ModifiedAt.IsZero() || object.Metadata["owner"] != "caller" {
+		object.Size != int64(len(input)) || object.SHA256 != wantDigest || !object.SHA256Known || object.ModifiedAt.IsZero() || object.Metadata["owner"] != "caller" {
 		t.Fatalf("Put object = %#v", object)
 	}
 
@@ -199,7 +208,7 @@ func testMultipartCompletion(t *testing.T, store objectstore.MultipartStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if object.Size != int64(len(fullData)) || object.SHA256 != fullDigest || object.Metadata["source"] != "multipart" {
+	if object.Size != int64(len(fullData)) || object.SHA256 != fullDigest || !object.SHA256Known || object.Metadata["source"] != "multipart" {
 		t.Fatalf("completed object = %#v", object)
 	}
 	body, _, err := store.Get(context.Background(), "objects", "multipart", objectstore.GetOptions{})
@@ -293,7 +302,7 @@ func testDefensiveCopies(t *testing.T, store objectstore.MultipartStore) {
 		t.Fatalf("stored metadata = %#v, error %v", stat.Metadata, err)
 	}
 	stat.Metadata["key"] = "mutated stat"
-	page, err := store.List(context.Background(), "objects", objectstore.ListOptions{Limit: 10})
+	page, err := store.List(context.Background(), "objects", objectstore.ListOptions{Limit: 10, IncludeMetadata: true})
 	if err != nil || len(page.Objects) != 1 || page.Objects[0].Metadata["key"] != "original" {
 		t.Fatalf("listed metadata = %#v, error %v", page, err)
 	}

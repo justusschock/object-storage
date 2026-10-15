@@ -118,7 +118,7 @@ func (writer *Writer) Commit(ctx context.Context, store objectstore.Store, bucke
 	if err != nil {
 		return Metadata{}, err
 	}
-	defer dataFile.Close()
+	defer func() { _ = dataFile.Close() }()
 	entries := make([]Entry, 0, len(digests))
 	var offset int64
 	for _, digest := range digests {

@@ -13,44 +13,53 @@ func TestCICompatibilityContract(t *testing.T) {
 	}
 	workflow := string(data)
 	for _, required := range []string{
-		"'1.22.x'", "'1.23.x'", "'1.24.x'", "'1.25.x'", "'1.26.x'",
+		"'1.25.x'", "'1.26.x'", "'1.27.x'",
 		"secrets.GO_MODULES_TOKEN", "${HOME}/.netrc", "GOPRIVATE", "GONOSUMDB",
 		"go mod download", "go mod verify", "go mod tidy", "git diff --exit-code -- go.mod go.sum",
 		"go test ./...", "go test -race ./...", "go test -tags=integration ./...", "go vet ./...",
 		"working-directory: backend/s3", "github.com/justusschock/go-", "v0.2.0", "aws-sdk",
-		"./scripts/verify-release-modules.sh",
+		"./scripts/verify-release-modules.sh", "../../scripts/with-root-candidate.sh go test ./...",
+		"GOOS=${target%/*}", "windows/amd64",
 	} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("CI workflow is missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"set -x", `echo "${GO_MODULES_TOKEN}"`, "replace github.com/justusschock"} {
+	for _, forbidden := range []string{"set -x", `echo "${GO_MODULES_TOKEN}"`, "replace github.com/justusschock", "'1.22.x'", "'1.24.x'"} {
 		if strings.Contains(workflow, forbidden) {
 			t.Errorf("CI workflow contains unsafe or forbidden fragment %q", forbidden)
 		}
 	}
 
-	info, err := os.Stat("scripts/verify-release-modules.sh")
-	if err != nil {
-		t.Fatalf("stat release module verifier: %v", err)
+	for _, path := range []string{"scripts/verify-release-modules.sh", "scripts/with-root-candidate.sh"} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if info.Mode()&0o111 == 0 {
+			t.Errorf("%s is not executable", path)
+		}
 	}
-	if info.Mode()&0o111 == 0 {
-		t.Error("release module verifier is not executable")
-	}
-	script, err := os.ReadFile("scripts/verify-release-modules.sh")
+	verifier, err := os.ReadFile("scripts/verify-release-modules.sh")
 	if err != nil {
 		t.Fatalf("read release module verifier: %v", err)
 	}
-	if !strings.Contains(string(script), "git cat-file -t") {
-		t.Error("release module verifier does not require an annotated tag")
+	if !strings.Contains(string(verifier), "scripts/with-root-candidate.sh") {
+		t.Error("release module verifier does not verify nested modules against the root release candidate")
 	}
-	if strings.Contains(string(script), `go list -m -json "${root_module}@v0.2.0"`) {
-		t.Error("release module verifier may select an ambient cached root release instead of the exact candidate")
+	script, err := os.ReadFile("scripts/with-root-candidate.sh")
+	if err != nil {
+		t.Fatalf("read release candidate runner: %v", err)
 	}
-	if !strings.Contains(string(script), `export GOMODCACHE=${temporary_directory}/gomodcache`) {
-		t.Error("release module verifier does not isolate the exact candidate from the ambient module cache")
+	for _, required := range []string{
+		"git cat-file -t", "ls-remote --exit-code --tags origin",
+		`export GOMODCACHE=${temporary_directory}/gomodcache`, "go clean -modcache", "backend/s3/go.mod",
+	} {
+		if !strings.Contains(string(script), required) {
+			t.Errorf("release candidate runner is missing %q", required)
+		}
 	}
-	if !strings.Contains(string(script), "go clean -modcache") {
-		t.Error("release module verifier does not safely clean its read-only module cache")
+	if strings.Contains(string(script)+string(verifier), `go list -m -json "${root_module}@v0.2.0"`) {
+		t.Error("release verification may select an ambient cached root release instead of the exact candidate")
 	}
 }

@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// rootRelease is the root module version that backend/s3 requires; it is
+// tagged together with backend/s3 from one commit.
+const rootRelease = "v0.3.0"
+
 func TestReleaseModuleChecksums(t *testing.T) {
 	tests := []struct {
 		path    string
@@ -20,10 +24,6 @@ func TestReleaseModuleChecksums(t *testing.T) {
 				"github.com/justusschock/go-lifecycle",
 				"github.com/justusschock/go-messaging",
 			},
-		},
-		{
-			path:    "backend/s3/go.sum",
-			modules: []string{"github.com/justusschock/go-object-storage"},
 		},
 	}
 
@@ -42,14 +42,44 @@ func TestReleaseModuleChecksums(t *testing.T) {
 			}
 		}
 
-		for _, line := range strings.Split(string(data), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 || !strings.HasPrefix(fields[0], "github.com/justusschock/go-") {
-				continue
-			}
-			if fields[1] != "v0.2.0" && fields[1] != "v0.2.0/go.mod" {
-				t.Errorf("%s contains non-v0.2.0 private dependency %s %s", test.path, fields[0], fields[1])
-			}
+		checkPrivateVersions(t, test.path, string(data))
+	}
+
+	data, err := os.ReadFile("backend/s3/go.sum")
+	if err != nil {
+		t.Fatalf("read backend/s3/go.sum: %v", err)
+	}
+	for _, suffix := range []string{" h1:", "/go.mod h1:"} {
+		if !strings.Contains(string(data), "github.com/justusschock/go-object-storage "+rootRelease+suffix) {
+			t.Errorf("backend/s3/go.sum is missing the root %s%s checksum", rootRelease, suffix)
+		}
+	}
+	checkPrivateVersions(t, "backend/s3/go.sum", string(data))
+	module, err := os.ReadFile("backend/s3/go.mod")
+	if err != nil {
+		t.Fatalf("read backend/s3/go.mod: %v", err)
+	}
+	if !strings.Contains(string(module), "github.com/justusschock/go-object-storage "+rootRelease+"\n") {
+		t.Errorf("backend/s3/go.mod does not require the root %s release", rootRelease)
+	}
+}
+
+// checkPrivateVersions allows sibling private modules only at v0.2.0 and
+// this repository's root module only at rootRelease.
+func checkPrivateVersions(t *testing.T, path, data string) {
+	t.Helper()
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || !strings.HasPrefix(fields[0], "github.com/justusschock/go-") {
+			continue
+		}
+		version := strings.TrimSuffix(fields[1], "/go.mod")
+		want := "v0.2.0"
+		if fields[0] == "github.com/justusschock/go-object-storage" {
+			want = rootRelease
+		}
+		if version != want {
+			t.Errorf("%s contains private dependency %s %s, want %s", path, fields[0], fields[1], want)
 		}
 	}
 }

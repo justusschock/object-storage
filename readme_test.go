@@ -13,11 +13,13 @@ func TestREADMEReleaseContract(t *testing.T) {
 	}
 	readme := string(data)
 	for _, required := range []string{
-		"Go 1.22",
-		"go get github.com/justusschock/go-object-storage@v0.2.0",
-		"go get github.com/justusschock/go-object-storage/backend/s3@v0.2.0",
-		"memory.New()", "PutOptions", "ByteRange", "IfAbsent", "SHA-256",
-		"s3adapter.New", "manager.NewUploader", "S3_ENDPOINT", "S3_REGION", "S3_BUCKET",
+		"Go 1.25",
+		"go get github.com/justusschock/go-object-storage@v0.3.0",
+		"go get github.com/justusschock/go-object-storage/backend/s3@v0.3.0",
+		"memory.New()", "PutOptions", "ByteRange", "IfAbsent", "SHA-256", "SHA256Known",
+		"IfMatchVersion", "BatchStater", "BatchDeleter", "Copier", "Presigner", "WithProgress",
+		"fs.New", "lease.New", "conformance.Run", "testing/synctest", "gofakes3",
+		"s3adapter.NewWithOptions", "S3_ENDPOINT", "S3_REGION", "S3_BUCKET",
 		"go test -race ./...", "go test -tags=integration ./...",
 	} {
 		if !strings.Contains(readme, required) {

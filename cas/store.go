@@ -68,7 +68,7 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 		return Digest{}, objectstore.Object{}, fmt.Errorf("cas: create temporary file: %w", err)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	defer func() {
 		returnErr = errors.Join(returnErr, temporary.Close())
 	}()
@@ -127,7 +127,7 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	key := store.key(digest)
 	existing, err := store.objects.Stat(fillCtx, store.bucket, key)
 	if err == nil {
-		if existing.SHA256 != [32]byte(digest) {
+		if !matchesDigest(existing, digest) {
 			store.invalidate(ctx, digest)
 			return Digest{}, objectstore.Object{}, ErrDigestMismatch
 		}
@@ -150,7 +150,7 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	if err != nil {
 		return Digest{}, objectstore.Object{}, err
 	}
-	if object.SHA256 != sum {
+	if !matchesDigest(object, digest) {
 		store.invalidate(ctx, digest)
 		return Digest{}, objectstore.Object{}, ErrDigestMismatch
 	}
@@ -158,7 +158,19 @@ func (store *Store) Put(ctx context.Context, reader io.Reader) (digest Digest, o
 	return digest, object.Clone(), nil
 }
 
-// Open opens a digest, verifying full reads and validating ranged metadata.
+// matchesDigest reports whether object may be served for digest. Objects this
+// package writes always carry a known digest that must match. An object with
+// an unknown digest (written by another tool, or by a backend that cannot
+// report it cheaply) is accepted on the strength of its content address:
+// full reads through Open still verify every byte, but Stat and ranged reads
+// of such objects are not verified.
+func matchesDigest(object objectstore.Object, digest Digest) bool {
+	known, ok := object.Digest()
+	return !ok || known == [32]byte(digest)
+}
+
+// Open opens a digest. Full reads are always verified while streaming; ranged
+// reads are checked against the stored digest when the backend reports one.
 func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectstore.ByteRange) (io.ReadCloser, objectstore.Object, error) {
 	body, object, err := store.objects.Get(ctx, store.bucket, store.key(digest), objectstore.GetOptions{Range: byteRange})
 	if err != nil {
@@ -167,7 +179,7 @@ func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectst
 		}
 		return nil, objectstore.Object{}, err
 	}
-	if object.SHA256 != [32]byte(digest) {
+	if !matchesDigest(object, digest) {
 		_ = body.Close()
 		store.invalidate(ctx, digest)
 		return nil, objectstore.Object{}, ErrDigestMismatch
@@ -190,7 +202,7 @@ func (store *Store) Open(ctx context.Context, digest Digest, byteRange *objectst
 // Stat returns cached or authoritative metadata for a digest.
 func (store *Store) Stat(ctx context.Context, digest Digest) (objectstore.Object, error) {
 	if store.metadata != nil {
-		if object, ok, err := store.metadata.Get(ctx, digest.String()); err == nil && ok && object.SHA256 == [32]byte(digest) {
+		if object, ok, err := store.metadata.Get(ctx, digest.String()); err == nil && ok && object.SHA256Known && object.SHA256 == [32]byte(digest) {
 			return object.Clone(), nil
 		}
 	}
@@ -201,7 +213,7 @@ func (store *Store) Stat(ctx context.Context, digest Digest) (objectstore.Object
 		}
 		return objectstore.Object{}, err
 	}
-	if object.SHA256 != [32]byte(digest) {
+	if !matchesDigest(object, digest) {
 		store.invalidate(ctx, digest)
 		return objectstore.Object{}, ErrDigestMismatch
 	}
@@ -214,7 +226,7 @@ func (store *Store) key(digest Digest) objectstore.Key {
 }
 
 func (store *Store) cache(ctx context.Context, digest Digest, object objectstore.Object) {
-	if store.metadata != nil {
+	if store.metadata != nil && object.SHA256Known {
 		_ = store.metadata.Set(context.WithoutCancel(ctx), digest.String(), object.Clone())
 	}
 }

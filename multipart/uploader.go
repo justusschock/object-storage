@@ -49,7 +49,11 @@ func newUploader(store objectstore.MultipartStore, options Options, minimum int6
 	return &Uploader{store: store, partSize: options.PartSize, maxParallel: options.MaxParallel}, nil
 }
 
-// UploadReaderAt uploads size bytes from reader and completes one object.
+// UploadReaderAt uploads size bytes from reader and completes one object. It
+// first reads the whole source sequentially to compute (or verify a supplied)
+// SHA-256 digest, which it declares at BeginMultipart, so the completed object
+// always carries a verified digest; a mismatch with PutOptions.SHA256 returns
+// ErrPrecondition before any upload starts.
 func (uploader *Uploader) UploadReaderAt(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, reader io.ReaderAt, size int64, options objectstore.PutOptions) (objectstore.Object, error) {
 	if err := ctx.Err(); err != nil {
 		return objectstore.Object{}, err
@@ -78,7 +82,23 @@ func (uploader *Uploader) UploadReaderAt(ctx context.Context, bucket objectstore
 	}
 	partCount := int(partCount64)
 
-	upload, err := uploader.store.BeginMultipart(ctx, bucket, key, options.Clone())
+	// Backends such as S3 cannot hash a multipart object server-side, so the
+	// uploader, which can re-read the source, computes or verifies the whole
+	// object digest before any part is published.
+	options = options.Clone()
+	digest, err := hashSection(ctx, reader, 0, size)
+	if err != nil {
+		return objectstore.Object{}, err
+	}
+	if options.SHA256 != nil && *options.SHA256 != digest {
+		return objectstore.Object{}, objectstore.ErrPrecondition
+	}
+	options.SHA256 = &digest
+	if options.Size == 0 {
+		options.Size = size
+	}
+
+	upload, err := uploader.store.BeginMultipart(ctx, bucket, key, options)
 	if err != nil {
 		return objectstore.Object{}, err
 	}

@@ -1,6 +1,6 @@
 module github.com/justusschock/go-object-storage
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/justusschock/go-cache v0.2.0

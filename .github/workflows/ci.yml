@@ -20,11 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - '1.22.x'
-          - '1.23.x'
-          - '1.24.x'
           - '1.25.x'
           - '1.26.x'
+          - '1.27.x'
 
     steps:
       - name: Check out repository
@@ -91,12 +89,22 @@ jobs:
       - name: Vet root module
         run: go vet ./...
 
+      - name: Cross-compile filesystem backend
+        shell: bash
+        run: |
+          for target in linux/amd64 darwin/arm64 windows/amd64 freebsd/amd64 solaris/amd64 js/wasm; do
+            GOOS=${target%/*} GOARCH=${target#*/} go vet ./backend/fs/...
+          done
+
+      # backend/s3 requires the root module version released together with
+      # it. Until that tag is published, with-root-candidate.sh serves the
+      # checked-out commit as that exact version from an isolated mirror.
       - name: Verify S3 module
         working-directory: backend/s3
         run: |
-          go mod download
-          go mod verify
-          go mod tidy
+          ../../scripts/with-root-candidate.sh go mod download
+          ../../scripts/with-root-candidate.sh go mod verify
+          ../../scripts/with-root-candidate.sh go mod tidy
           git diff --exit-code -- go.mod go.sum
 
       - name: Verify S3 private versions
@@ -104,20 +112,21 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" { print; bad=1 } END { exit bad }'
+          root_version=$(awk '$1 == "github.com/justusschock/go-object-storage" { print $2 }' go.mod)
+          ../../scripts/with-root-candidate.sh go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" -v root_version="${root_version}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" && !($1 == "github.com/justusschock/go-object-storage" && $2 == root_version) { print; bad=1 } END { exit bad }'
 
       - name: Test S3 module
         working-directory: backend/s3
-        run: go test ./...
+        run: ../../scripts/with-root-candidate.sh go test ./...
 
       - name: Compile integration contract
         working-directory: backend/s3
-        run: go test -tags=integration ./...
+        run: ../../scripts/with-root-candidate.sh go test -tags=integration ./...
 
       - name: Race-test S3 module
         working-directory: backend/s3
-        run: go test -race ./...
+        run: ../../scripts/with-root-candidate.sh go test -race ./...
 
       - name: Vet S3 module
         working-directory: backend/s3
-        run: go vet ./...
+        run: ../../scripts/with-root-candidate.sh go vet ./...

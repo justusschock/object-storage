@@ -301,3 +301,57 @@ func (lease *completionLease) Release(context.Context) error {
 	lease.doneOnce.Do(func() { close(lease.done) })
 	return nil
 }
+
+func TestUnknownDigestObjectsVerifyFullReads(t *testing.T) {
+	underlying := memory.New()
+	store, err := New(&unknownDigestStore{Store: underlying}, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := Digest(sha256.Sum256([]byte("foreign")))
+	corrupt := Digest(sha256.Sum256([]byte("expected")))
+	for digest, content := range map[Digest]string{good: "foreign", corrupt: "tampered"} {
+		if _, err := underlying.Put(context.Background(), "blobs", objectstore.Key("sha256/"+digest.hex()), strings.NewReader(content), objectstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if object, err := store.Stat(context.Background(), good); err != nil || object.SHA256Known {
+		t.Fatalf("Stat unknown digest = (%#v, %v)", object, err)
+	}
+	body, _, err := store.Open(context.Background(), good, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, readErr := io.ReadAll(body)
+	if closeErr := body.Close(); readErr != nil || closeErr != nil || string(data) != "foreign" {
+		t.Fatalf("verified read = (%q, %v, %v)", data, readErr, closeErr)
+	}
+	body, _, err = store.Open(context.Background(), corrupt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, readErr = io.ReadAll(body)
+	closeErr := body.Close()
+	if !errors.Is(errors.Join(readErr, closeErr), ErrDigestMismatch) {
+		t.Fatalf("tampered unknown-digest read = (%v, %v), want ErrDigestMismatch", readErr, closeErr)
+	}
+	if _, object, err := store.Put(context.Background(), strings.NewReader("foreign")); err != nil || object.Size != int64(len("foreign")) {
+		t.Fatalf("Put over unknown-digest object = (%#v, %v)", object, err)
+	}
+}
+
+// unknownDigestStore reports every object as lacking a recorded digest, like
+// S3 objects written by other tools.
+type unknownDigestStore struct{ *memory.Store }
+
+func (store *unknownDigestStore) Get(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, options objectstore.GetOptions) (io.ReadCloser, objectstore.Object, error) {
+	body, object, err := store.Store.Get(ctx, bucket, key, options)
+	object.SHA256, object.SHA256Known = [32]byte{}, false
+	return body, object, err
+}
+
+func (store *unknownDigestStore) Stat(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key) (objectstore.Object, error) {
+	object, err := store.Store.Stat(ctx, bucket, key)
+	object.SHA256, object.SHA256Known = [32]byte{}, false
+	return object, err
+}

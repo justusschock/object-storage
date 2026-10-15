@@ -33,7 +33,7 @@ func ExampleStore_exactRange() {
 	if err != nil {
 		panic(err)
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	data, err := io.ReadAll(body)
 	if err != nil {
 		panic(err)
