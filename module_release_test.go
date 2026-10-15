@@ -6,9 +6,13 @@ import (
 	"testing"
 )
 
-// rootRelease is the root module version that backend/s3 requires; it is
-// tagged together with backend/s3 from one commit.
+// rootRelease is the root module version that the nested backend modules
+// require; it is tagged together with backend/s3 from one commit.
 const rootRelease = "v0.3.0"
+
+// nestedModules are the backend modules with their own go.mod. Each requires
+// rootRelease.
+var nestedModules = []string{"backend/s3", "backend/gcs", "backend/azure", "backend/sftp", "backend/http"}
 
 func TestReleaseModuleChecksums(t *testing.T) {
 	tests := []struct {
@@ -45,22 +49,30 @@ func TestReleaseModuleChecksums(t *testing.T) {
 		checkPrivateVersions(t, test.path, string(data))
 	}
 
-	data, err := os.ReadFile("backend/s3/go.sum")
-	if err != nil {
-		t.Fatalf("read backend/s3/go.sum: %v", err)
-	}
-	for _, suffix := range []string{" h1:", "/go.mod h1:"} {
-		if !strings.Contains(string(data), "github.com/justusschock/go-object-storage "+rootRelease+suffix) {
-			t.Errorf("backend/s3/go.sum is missing the root %s%s checksum", rootRelease, suffix)
+	for _, nested := range nestedModules {
+		data, err := os.ReadFile(nested + "/go.sum")
+		if err != nil {
+			t.Fatalf("read %s/go.sum: %v", nested, err)
 		}
-	}
-	checkPrivateVersions(t, "backend/s3/go.sum", string(data))
-	module, err := os.ReadFile("backend/s3/go.mod")
-	if err != nil {
-		t.Fatalf("read backend/s3/go.mod: %v", err)
-	}
-	if !strings.Contains(string(module), "github.com/justusschock/go-object-storage "+rootRelease+"\n") {
-		t.Errorf("backend/s3/go.mod does not require the root %s release", rootRelease)
+		for _, suffix := range []string{" h1:", "/go.mod h1:"} {
+			if !strings.Contains(string(data), "github.com/justusschock/go-object-storage "+rootRelease+suffix) {
+				t.Errorf("%s/go.sum is missing the root %s%s checksum", nested, rootRelease, suffix)
+			}
+		}
+		checkPrivateVersions(t, nested+"/go.sum", string(data))
+		module, err := os.ReadFile(nested + "/go.mod")
+		if err != nil {
+			t.Fatalf("read %s/go.mod: %v", nested, err)
+		}
+		if !strings.Contains(string(module), "module github.com/justusschock/go-object-storage/"+nested+"\n") {
+			t.Errorf("%s/go.mod has the wrong module path", nested)
+		}
+		if !strings.Contains(string(module), "github.com/justusschock/go-object-storage "+rootRelease+"\n") {
+			t.Errorf("%s/go.mod does not require the root %s release", nested, rootRelease)
+		}
+		if !strings.Contains(string(module), "\ngo 1.25.0\n") || strings.Contains(string(module), "\ntoolchain ") {
+			t.Errorf("%s/go.mod must declare go 1.25.0 without a toolchain line", nested)
+		}
 	}
 }
 

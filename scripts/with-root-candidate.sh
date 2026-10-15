@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Runs a command so that the root module version required by backend/s3
+# Runs a command so that the root module version required by backend/s3 (and
+# by every other nested backend module, which require the same version)
 # resolves correctly before and after that version is published.
 #
 # When the required tag exists on origin, the command runs unchanged against

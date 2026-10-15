@@ -17,7 +17,9 @@ func TestCICompatibilityContract(t *testing.T) {
 		"secrets.GO_MODULES_TOKEN", "${HOME}/.netrc", "GOPRIVATE", "GONOSUMDB",
 		"go mod download", "go mod verify", "go mod tidy", "git diff --exit-code -- go.mod go.sum",
 		"go test ./...", "go test -race ./...", "go test -tags=integration ./...", "go vet ./...",
-		"working-directory: backend/s3", "github.com/justusschock/go-", "v0.2.0", "aws-sdk",
+		"working-directory: ${{ matrix.module }}", "github.com/justusschock/go-", "v0.2.0", "aws-sdk",
+		"- backend/s3", "- backend/gcs", "- backend/azure", "- backend/sftp", "- backend/http",
+		"cloud\\.google\\.com|azure-sdk-for-go|fsouza|pkg/sftp|x/crypto/ssh",
 		"./scripts/verify-release-modules.sh", "../../scripts/with-root-candidate.sh go test ./...",
 		"GOOS=${target%/*}", "windows/amd64",
 	} {
@@ -46,6 +48,9 @@ func TestCICompatibilityContract(t *testing.T) {
 	}
 	if !strings.Contains(string(verifier), "scripts/with-root-candidate.sh") {
 		t.Error("release module verifier does not verify nested modules against the root release candidate")
+	}
+	if !strings.Contains(string(verifier), "nested_modules=(backend/s3 backend/gcs backend/azure backend/sftp backend/http)") {
+		t.Error("release module verifier does not verify every nested module")
 	}
 	script, err := os.ReadFile("scripts/with-root-candidate.sh")
 	if err != nil {

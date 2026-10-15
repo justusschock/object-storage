@@ -37,7 +37,7 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-            backend/s3/go.sum
+            backend/*/go.sum
 
       - name: Configure private module authentication
         env:
@@ -55,7 +55,7 @@ jobs:
             echo 'committed go.work files are forbidden'
             exit 1
           fi
-          if grep -En '^replace([[:space:]]|$)' go.mod backend/s3/go.mod; then
+          if git ls-files -z -- go.mod '*/go.mod' | xargs -0 grep -En '^replace([[:space:]]|$)'; then
             echo 'committed replace directives are forbidden'
             exit 1
           fi
@@ -75,8 +75,8 @@ jobs:
         run: |
           set -o pipefail
           go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" { print; bad=1 } END { exit bad }'
-          if go list -deps ./... | grep -Ei 'aws-sdk'; then
-            echo 'root module imports AWS SDK packages'
+          if go list -deps ./... | grep -Ei 'aws-sdk|cloud\.google\.com|azure-sdk-for-go|fsouza|pkg/sftp|x/crypto/ssh'; then
+            echo 'root module imports cloud/SFTP SDK packages'
             exit 1
           fi
 
@@ -96,37 +96,81 @@ jobs:
             GOOS=${target%/*} GOARCH=${target#*/} go vet ./backend/fs/...
           done
 
-      # backend/s3 requires the root module version released together with
-      # it. Until that tag is published, with-root-candidate.sh serves the
-      # checked-out commit as that exact version from an isolated mirror.
-      - name: Verify S3 module
-        working-directory: backend/s3
+  nested:
+    name: ${{ matrix.module }} on Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - '1.25.x'
+          - '1.26.x'
+          - '1.27.x'
+        module:
+          - backend/s3
+          - backend/gcs
+          - backend/azure
+          - backend/sftp
+          - backend/http
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: Configure private module authentication
+        env:
+          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
+        shell: bash
+        run: |
+          test -n "${GO_MODULES_TOKEN}"
+          umask 077
+          printf 'machine github.com\nlogin x-access-token\npassword %s\n' "${GO_MODULES_TOKEN}" > "${HOME}/.netrc"
+
+      # Nested modules require the root module version released together
+      # with them. Until that tag is published, with-root-candidate.sh serves
+      # the checked-out commit as that exact version from an isolated mirror.
+      - name: Verify module
         run: |
           ../../scripts/with-root-candidate.sh go mod download
           ../../scripts/with-root-candidate.sh go mod verify
           ../../scripts/with-root-candidate.sh go mod tidy
           git diff --exit-code -- go.mod go.sum
 
-      - name: Verify S3 private versions
-        working-directory: backend/s3
+      - name: Verify private versions
         shell: bash
         run: |
           set -o pipefail
-          root_version=$(awk '$1 == "github.com/justusschock/go-object-storage" { print $2 }' go.mod)
+          root_version=$(awk '$1 == "github.com/justusschock/go-object-storage" { print $2 } $1 == "require" && $2 == "github.com/justusschock/go-object-storage" { print $3 }' go.mod)
           ../../scripts/with-root-candidate.sh go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" -v root_version="${root_version}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" && !($1 == "github.com/justusschock/go-object-storage" && $2 == root_version) { print; bad=1 } END { exit bad }'
 
-      - name: Test S3 module
-        working-directory: backend/s3
+      - name: Test module
         run: ../../scripts/with-root-candidate.sh go test ./...
 
       - name: Compile integration contract
-        working-directory: backend/s3
         run: ../../scripts/with-root-candidate.sh go test -tags=integration ./...
 
-      - name: Race-test S3 module
-        working-directory: backend/s3
+      - name: Race-test module
         run: ../../scripts/with-root-candidate.sh go test -race ./...
 
-      - name: Vet S3 module
-        working-directory: backend/s3
+      - name: Vet module
         run: ../../scripts/with-root-candidate.sh go vet ./...
+
+      - name: Cross-compile portable backends
+        if: matrix.module == 'backend/sftp' || matrix.module == 'backend/http'
+        shell: bash
+        run: |
+          for target in linux/amd64 darwin/arm64 windows/amd64 freebsd/amd64; do
+            GOOS=${target%/*} GOARCH=${target#*/} ../../scripts/with-root-candidate.sh go vet ./...
+          done
