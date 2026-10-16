@@ -151,7 +151,8 @@ func (store *Store) Copy(ctx context.Context, srcBucket objectstore.Bucket, srcK
 }
 
 func copyPublication(source objectstore.Object, options objectstore.CopyOptions, etag, nonce string) publication {
-	write := publication{etag: etag, size: source.Size, nonce: nonce, metadata: source.Metadata}
+	// Multipart copies carry an upload nonce; single CopyObject calls do not.
+	write := publication{multipart: nonce != "", etag: etag, size: source.Size, nonce: nonce, metadata: source.Metadata}
 	if options.Metadata != nil {
 		write.metadata = options.Metadata
 	}

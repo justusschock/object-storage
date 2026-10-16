@@ -10,8 +10,10 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
@@ -399,4 +401,54 @@ type stubClient struct {
 func (client *stubClient) DeleteObjects(_ context.Context, input *awss3.DeleteObjectsInput, _ ...func(*awss3.Options)) (*awss3.DeleteObjectsOutput, error) {
 	client.deleteInputs = append(client.deleteInputs, input)
 	return &awss3.DeleteObjectsOutput{Errors: client.deleteErrors}, nil
+}
+
+func TestNoHeadAfterWriteReturnsTheAcknowledgedObject(t *testing.T) {
+	fake := newFakeS3(t)
+	ctx := context.Background()
+	small := []byte("content-addressed")
+	large := patterned(3*testPartSize + 5)
+	for _, skip := range []bool{false, true} {
+		store := fake.store(t, Options{PartSize: testPartSize, Concurrency: 2, NoHeadAfterWrite: skip})
+		fake.handler.reset()
+		written := map[objectstore.Key]objectstore.Object{}
+		var err error
+		if written["small"], err = store.Put(ctx, "objects", "small", bytes.NewReader(small), objectstore.PutOptions{Metadata: map[string]string{"k": "v"}}); err != nil {
+			t.Fatal(err)
+		}
+		if written["large"], err = store.Put(ctx, "objects", "large", bytes.NewReader(large), objectstore.PutOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if written["copy"], err = store.Copy(ctx, "objects", "small", "objects-copy", "copy", objectstore.CopyOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		// Copy reads its source once; the multipart Put keeps its HEAD
+		// (some stores acknowledge multipart writes with another entity tag).
+		heads := countRequests(fake.handler.recorded(), "HEAD", "")
+		if skip && heads != 2 {
+			t.Fatalf("NoHeadAfterWrite: %d HEAD requests, want 2 (copy source, multipart Put)", heads)
+		}
+		if !skip && heads != 4 {
+			t.Fatalf("default: %d HEAD requests, want 4", heads)
+		}
+		// The returned objects match what a HEAD reports, ModifiedAt aside.
+		for key, got := range written {
+			bucket := objectstore.Bucket("objects")
+			if key == "copy" {
+				bucket = "objects-copy"
+			}
+			want, err := store.Stat(ctx, bucket, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got.ModifiedAt, want.ModifiedAt = time.Time{}, time.Time{}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("skip=%v %s: returned %#v, HEAD reports %#v", skip, key, got, want)
+			}
+		}
+		// The returned Version works as a compare-and-swap token.
+		if _, err := store.Put(ctx, "objects", "small", bytes.NewReader([]byte("v2")), objectstore.PutOptions{IfMatchVersion: written["small"].Version}); err != nil {
+			t.Fatalf("skip=%v: CAS with the returned version: %v", skip, err)
+		}
+	}
 }

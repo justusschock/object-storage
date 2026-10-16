@@ -66,7 +66,7 @@ func (store *Store) putStream(ctx context.Context, bucket objectstore.Bucket, ke
 	if err != nil {
 		return abort(err)
 	}
-	return store.published(ctx, bucket, key, publication{etag: optionalDereference(output.ETag), size: total, digest: &digest, nonce: nonce, metadata: options.Metadata})
+	return store.published(ctx, bucket, key, publication{multipart: true, etag: optionalDereference(output.ETag), size: total, digest: &digest, nonce: nonce, metadata: options.Metadata})
 }
 
 // uploadParts reads source sequentially in partSize chunks, hashing each

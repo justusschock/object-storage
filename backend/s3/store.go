@@ -123,6 +123,14 @@ type Options struct {
 	// MultipartCopyThreshold is the largest source copied with a single
 	// CopyObject request; default and maximum 5 GiB.
 	MultipartCopyThreshold int64
+	// NoHeadAfterWrite builds the Object that single-request writes (Put
+	// below PartSize, Copy below MultipartCopyThreshold) return from S3's
+	// acknowledgment instead of a HEAD request, saving one request per
+	// write. Every field matches what a HEAD reports (Version is the entity
+	// tag) except ModifiedAt, which is the local clock: the acknowledgment
+	// carries no Last-Modified. Multipart writes, and writes acknowledged
+	// without an entity tag, still read the HEAD.
+	NoHeadAfterWrite bool
 }
 
 func (options Options) withDefaults() (Options, error) {
@@ -264,11 +272,15 @@ func (store *Store) putBuffered(ctx context.Context, bucket objectstore.Bucket, 
 
 // publication describes a write this store just completed.
 type publication struct {
-	etag     string
-	size     int64
-	digest   *[32]byte
-	nonce    string
-	metadata map[string]string
+	// multipart writes are completed from parts; some S3-compatible stores
+	// acknowledge them with an entity tag that differs from what HEAD
+	// reports, so their result always comes from the HEAD.
+	multipart bool
+	etag      string
+	size      int64
+	digest    *[32]byte
+	nonce     string
+	metadata  map[string]string
 }
 
 // published returns metadata for a just-written object. It never fails a
@@ -277,6 +289,9 @@ type publication struct {
 // when a concurrent writer already replaced the object, the result is built
 // from the acknowledged write with the local time as ModifiedAt.
 func (store *Store) published(ctx context.Context, bucket objectstore.Bucket, key objectstore.Key, write publication) (objectstore.Object, error) {
+	if store.options.NoHeadAfterWrite && !write.multipart && write.etag != "" {
+		return acknowledged(bucket, key, write), nil
+	}
 	output, err := store.client.HeadObject(ctx, &awss3.HeadObjectInput{Bucket: stringPointer(string(bucket)), Key: stringPointer(string(key))})
 	if err == nil {
 		object, convertErr := objectFromHead(bucket, key, output)
@@ -298,6 +313,12 @@ func (store *Store) published(ctx context.Context, bucket objectstore.Bucket, ke
 	if write.etag == "" {
 		return objectstore.Object{}, errors.New("s3 store: write acknowledged without an entity tag")
 	}
+	return acknowledged(bucket, key, write), nil
+}
+
+// acknowledged builds the Object of a write from its acknowledgment, with
+// the local time as ModifiedAt.
+func acknowledged(bucket objectstore.Bucket, key objectstore.Key, write publication) objectstore.Object {
 	object := objectstore.Object{
 		Bucket: bucket, Key: key, Version: write.etag, ETag: write.etag, Size: write.size,
 		ModifiedAt: time.Now().UTC(), Metadata: maps.Clone(write.metadata),
@@ -308,7 +329,7 @@ func (store *Store) published(ctx context.Context, bucket objectstore.Bucket, ke
 	if write.digest != nil {
 		object.SHA256, object.SHA256Known = *write.digest, true
 	}
-	return object, nil
+	return object
 }
 
 // Get opens an object or exact byte range. It never reads beyond the

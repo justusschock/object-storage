@@ -158,7 +158,7 @@ func (store *Store) CompleteMultipart(ctx context.Context, upload objectstore.Up
 		return objectstore.Object{}, err
 	}
 	return store.published(ctx, custody.Bucket, custody.Key, publication{
-		etag: optionalDereference(output.ETag), size: total, digest: custody.Options.SHA256, nonce: custody.Nonce, metadata: custody.Options.Metadata,
+		multipart: true, etag: optionalDereference(output.ETag), size: total, digest: custody.Options.SHA256, nonce: custody.Nonce, metadata: custody.Options.Metadata,
 	})
 }
 
