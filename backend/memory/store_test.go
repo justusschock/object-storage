@@ -5,7 +5,7 @@ import (
 
 	objectstore "github.com/justusschock/go-object-storage"
 	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	"github.com/justusschock/go-object-storage/storetest"
 )
 
 func TestStoreContract(t *testing.T) {

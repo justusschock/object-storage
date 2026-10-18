@@ -18,7 +18,7 @@ import (
 
 	objectstore "github.com/justusschock/go-object-storage"
 	"github.com/justusschock/go-object-storage/backend/fs"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	"github.com/justusschock/go-object-storage/storetest"
 )
 
 func TestConformance(t *testing.T) {

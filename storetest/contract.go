@@ -1,4 +1,22 @@
-// Package storetest provides reusable object-store conformance tests.
+// Package storetest is the conformance suite for implementations of
+// objectstore.Store and objectstore.MultipartStore.
+//
+// Run exercises the complete Store and MultipartStore contract (immutable
+// versions, exact ranges, pagination, conditional writes and their
+// concurrency, digest and size verification, multipart ordering and abort,
+// cancellation, defensive copies, streaming bodies) and then every optional
+// capability (BatchStater, BatchDeleter, Copier, Presigner) the store
+// implements. Every backend in this repository passes it; third-party
+// backends should run it from their own tests:
+//
+//	func TestConformance(t *testing.T) {
+//		storetest.Run(t, func(t *testing.T) objectstore.MultipartStore {
+//			return newEmptyStore(t)
+//		})
+//	}
+//
+// The suite calls t.Run for each case and t.Fatal on violations; it never
+// skips. Cases are not run in parallel with each other.
 package storetest
 
 import (
