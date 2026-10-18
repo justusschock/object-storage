@@ -1,3 +1,11 @@
+// Package cas stores immutable content addressed by its SHA-256 digest.
+//
+// Store.Put spools a body to an owner-only temporary file while hashing it,
+// then writes it once under prefix/<hex digest> with IfAbsent while holding a
+// fenced go-distributed-coordination lease for the digest, so concurrent
+// writers of the same content upload it only once. Store.Open verifies every
+// byte of a full read against the digest; ranged reads return exact bytes.
+// An optional go-cache Cache keeps object metadata for Stat.
 package cas
 
 import (

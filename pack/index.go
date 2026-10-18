@@ -1,3 +1,15 @@
+// Package pack bundles many content-addressed blobs into one immutable data
+// object plus a binary index, so a reader fetches any blob with one exact
+// ranged read.
+//
+// Writer stages blobs (verifying each declared size and digest) and Commit
+// publishes the data object and its index with IfAbsent and declared
+// digests at prefix/<index SHA-256>.pack and prefix/<index SHA-256>.idx; the
+// output is deterministic for a given set of blobs. The index
+// starts with the magic "GOPACK01" and a big-endian entry count, followed by
+// one 48-byte record (digest, offset, length) per blob in ascending digest
+// order. OpenReader validates the index against Metadata before serving
+// reads, and Reader.Open verifies the digest of every blob it streams.
 package pack
 
 import (
@@ -17,7 +29,9 @@ const (
 )
 
 var (
-	ErrInvalidPack     = errors.New("pack: invalid pack")
+	// ErrInvalidPack identifies a malformed, truncated or tampered pack.
+	ErrInvalidPack = errors.New("pack: invalid pack")
+	// ErrDuplicateDigest identifies a blob added twice to one Writer.
 	ErrDuplicateDigest = errors.New("pack: duplicate digest")
 )
 
