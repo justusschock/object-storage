@@ -33,7 +33,8 @@ type stagedBlob struct {
 	size int64
 }
 
-// Writer stages verified blobs for deterministic commit.
+// Writer stages verified blobs for deterministic commit. It is not safe for
+// concurrent use, and it is consumed by a successful Commit.
 type Writer struct {
 	directory string
 	blobs     map[cas.Digest]stagedBlob

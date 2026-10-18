@@ -45,7 +45,8 @@ type Options struct {
 	PollInterval time.Duration
 }
 
-// Backend grants leases stored as objects in one bucket under one prefix.
+// Backend grants leases stored as objects in one bucket under one prefix. It
+// and the leases it grants are safe for concurrent use.
 type Backend struct {
 	store        objectstore.Store
 	bucket       objectstore.Bucket

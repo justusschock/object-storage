@@ -170,7 +170,8 @@ func (options Options) withDefaults() (Options, error) {
 	return options, nil
 }
 
-// Store maps portable object operations to Azure Blob Storage requests.
+// Store maps portable object operations to Azure Blob Storage requests. It
+// is safe for concurrent use.
 type Store struct {
 	client  *azblob.Client
 	options Options

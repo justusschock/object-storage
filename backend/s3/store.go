@@ -162,7 +162,8 @@ func (options Options) withDefaults() (Options, error) {
 	return options, nil
 }
 
-// Store maps portable object operations to S3 requests.
+// Store maps portable object operations to S3 requests. It is safe for
+// concurrent use.
 type Store struct {
 	client    clientAPI
 	presigner presignAPI

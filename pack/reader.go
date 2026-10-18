@@ -13,7 +13,8 @@ import (
 	"github.com/justusschock/go-object-storage/cas"
 )
 
-// Reader provides digest lookup over one validated immutable pack.
+// Reader provides digest lookup over one validated immutable pack. It is safe
+// for concurrent use.
 type Reader struct {
 	store    objectstore.Store
 	metadata Metadata

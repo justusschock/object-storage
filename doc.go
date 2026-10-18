@@ -17,7 +17,8 @@
 //
 // Implementations live in backend/memory and backend/fs (this module) and in
 // the nested modules backend/s3, backend/gcs, backend/azure, backend/sftp and
-// backend/http. Every implementation is safe for concurrent use and passes
-// the conformance suite in package storetest. The packages cas, pack,
-// multipart, lease and handoff build on any Store.
+// backend/http. Every implementation is safe for concurrent use, and every
+// read/write implementation passes the conformance suite in package
+// storetest. The packages cas, pack, multipart, lease and handoff build on
+// any Store.
 package objectstore

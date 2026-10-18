@@ -24,7 +24,8 @@ type Options struct {
 	MaxParallel int
 }
 
-// Uploader uploads fixed sections with bounded parallelism.
+// Uploader uploads fixed sections with bounded parallelism. It is safe for
+// concurrent use.
 type Uploader struct {
 	store       objectstore.MultipartStore
 	partSize    int64

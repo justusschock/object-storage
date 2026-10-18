@@ -35,6 +35,7 @@ type multipart struct {
 }
 
 // Store keeps immutable object versions and multipart uploads in memory.
+// It is safe for concurrent use.
 type Store struct {
 	mu           sync.RWMutex
 	objects      map[objectstore.Bucket]map[objectstore.Key]record

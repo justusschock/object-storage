@@ -28,7 +28,8 @@ var (
 	ErrInvalidReceipt = errors.New("object handoff: invalid receipt")
 )
 
-// Transport stores canonical artifact envelopes as immutable objects.
+// Transport stores canonical artifact envelopes as immutable objects. It is
+// safe for concurrent use.
 type Transport struct {
 	store  objectstore.Store
 	bucket objectstore.Bucket

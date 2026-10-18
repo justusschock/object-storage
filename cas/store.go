@@ -22,7 +22,9 @@ const leaseTTL = time.Minute
 
 var errFillComplete = errors.New("cas: fill complete")
 
-// Store keeps immutable SHA-256-addressed objects.
+// Store keeps immutable SHA-256-addressed objects. It is safe for concurrent
+// use, also by many processes that share the object store and the
+// coordination backend.
 type Store struct {
 	objects      objectstore.Store
 	bucket       objectstore.Bucket
