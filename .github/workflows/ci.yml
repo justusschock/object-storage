@@ -2,175 +2,139 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    tags: ["v*", "backend/*/v*"]
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
-  GOPRIVATE: github.com/justusschock/*
-  GONOSUMDB: github.com/justusschock/*
-  PRIVATE_MODULE_PREFIX: github.com/justusschock/go-
+  # Every module directory: the root module and the nested backend modules.
+  MODULES: ". backend/azure backend/gcs backend/http backend/s3 backend/sftp"
 
 jobs:
   test:
-    name: Go ${{ matrix.go }}
+    name: test (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        go:
-          - '1.25.x'
-          - '1.26.x'
-          - '1.27.x'
-
+        go-version: ["1.25.x", "oldstable", "stable"]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: ${{ matrix.go }}
-          cache: true
-          cache-dependency-path: |
-            go.sum
-            backend/*/go.sum
-
-      - name: Configure private module authentication
-        env:
-          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
-        shell: bash
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: "**/go.sum"
+      - name: Verify modules
         run: |
-          test -n "${GO_MODULES_TOKEN}"
-          umask 077
-          printf 'machine github.com\nlogin x-access-token\npassword %s\n' "${GO_MODULES_TOKEN}" > "${HOME}/.netrc"
-
-      - name: Verify repository policy
-        shell: bash
+          for module in $MODULES; do
+            (cd "$module" && GOWORK=off go mod verify)
+          done
+      # The nested modules require a released root version. A temporary
+      # workspace tests them against the checked-out root instead, so a
+      # change to the root contract is tested against every backend.
+      - name: Create workspace
+        run: go work init $MODULES
+      - name: Vet
         run: |
-          if git ls-files | grep -E '(^|/)go\.work$'; then
-            echo 'committed go.work files are forbidden'
+          for module in $MODULES; do
+            (cd "$module" && go vet ./... && go vet -tags=integration ./...)
+          done
+      - name: Test
+        run: |
+          for module in $MODULES; do
+            (cd "$module" && go test -race -count=1 ./...)
+          done
+
+  lint:
+    name: lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [".", backend/azure, backend/gcs, backend/http, backend/s3, backend/sftp]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: "**/go.sum"
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          working-directory: ${{ matrix.module }}
+      - name: Check go.mod and go.sum are tidy
+        working-directory: ${{ matrix.module }}
+        run: |
+          GOWORK=off go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  boundaries:
+    name: dependency boundary and portability
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: "**/go.sum"
+      - name: Root module stays free of cloud and SSH SDKs
+        run: |
+          if go list -deps ./... | grep -E 'aws-sdk|cloud\.google\.com|azure-sdk-for-go|fsouza|gofakes3|pkg/sftp|x/crypto/ssh'; then
+            echo "the root module must not depend on provider SDKs; they belong in backend/* modules"
             exit 1
           fi
-          if git ls-files -z -- go.mod '*/go.mod' | xargs -0 grep -En '^replace([[:space:]]|$)'; then
-            echo 'committed replace directives are forbidden'
-            exit 1
-          fi
-
-      - name: Verify standalone release modules
-        run: ./scripts/verify-release-modules.sh
-
-      - name: Verify root module
+      - name: No committed workspace or replace directives
         run: |
-          go mod download
-          go mod verify
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
-
-      - name: Verify root private versions and dependency boundary
-        shell: bash
-        run: |
-          set -o pipefail
-          go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" { print; bad=1 } END { exit bad }'
-          if go list -deps ./... | grep -Ei 'aws-sdk|cloud\.google\.com|azure-sdk-for-go|fsouza|pkg/sftp|x/crypto/ssh'; then
-            echo 'root module imports cloud/SFTP SDK packages'
-            exit 1
-          fi
-
-      - name: Test root module
-        run: go test ./...
-
-      - name: Race-test root module
-        run: go test -race ./...
-
-      - name: Vet root module
-        run: go vet ./...
-
-      - name: Cross-compile filesystem backend
-        shell: bash
+          if git ls-files | grep -E '(^|/)go\.work(\.sum)?$'; then exit 1; fi
+          if git ls-files -z -- go.mod '*/go.mod' | xargs -0 grep -En '^replace([[:space:]]|$)'; then exit 1; fi
+      - name: Create workspace
+        run: go work init $MODULES
+      - name: Cross-compile portable stores
         run: |
           for target in linux/amd64 darwin/arm64 windows/amd64 freebsd/amd64 solaris/amd64 js/wasm; do
             GOOS=${target%/*} GOARCH=${target#*/} go vet ./backend/fs/...
           done
+          for module in backend/sftp backend/http; do
+            for target in linux/amd64 darwin/arm64 windows/amd64 freebsd/amd64; do
+              (cd "$module" && GOOS=${target%/*} GOARCH=${target#*/} go vet ./...)
+            done
+          done
 
-  nested:
-    name: ${{ matrix.module }} on Go ${{ matrix.go }}
+  # On a release tag, test every module exactly as consumers resolve it:
+  # without a workspace, against the root version its go.mod requires.
+  release:
+    name: release modules
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go:
-          - '1.25.x'
-          - '1.26.x'
-          - '1.27.x'
-        module:
-          - backend/s3
-          - backend/gcs
-          - backend/azure
-          - backend/sftp
-          - backend/http
-    defaults:
-      run:
-        working-directory: ${{ matrix.module }}
-
+    timeout-minutes: 30
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: ${{ matrix.go }}
-          cache: true
-          cache-dependency-path: ${{ matrix.module }}/go.sum
-
-      - name: Configure private module authentication
+          go-version: stable
+          cache-dependency-path: "**/go.sum"
+      - name: Test modules as released
         env:
-          GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN }}
-        shell: bash
+          GOWORK: "off"
         run: |
-          test -n "${GO_MODULES_TOKEN}"
-          umask 077
-          printf 'machine github.com\nlogin x-access-token\npassword %s\n' "${GO_MODULES_TOKEN}" > "${HOME}/.netrc"
-
-      # Nested modules require the root module version released together
-      # with them. Until that tag is published, with-root-candidate.sh serves
-      # the checked-out commit as that exact version from an isolated mirror.
-      - name: Verify module
-        run: |
-          ../../scripts/with-root-candidate.sh go mod download
-          ../../scripts/with-root-candidate.sh go mod verify
-          ../../scripts/with-root-candidate.sh go mod tidy
-          git diff --exit-code -- go.mod go.sum
-
-      - name: Verify private versions
-        shell: bash
-        run: |
-          set -o pipefail
-          root_version=$(awk '$1 == "github.com/justusschock/go-object-storage" { print $2 } $1 == "require" && $2 == "github.com/justusschock/go-object-storage" { print $3 }' go.mod)
-          ../../scripts/with-root-candidate.sh go list -m all | awk -v prefix="${PRIVATE_MODULE_PREFIX}" -v root_version="${root_version}" 'index($1, prefix) == 1 && NF > 1 && $2 != "v0.2.0" && !($1 == "github.com/justusschock/go-object-storage" && $2 == root_version) { print; bad=1 } END { exit bad }'
-
-      - name: Test module
-        run: ../../scripts/with-root-candidate.sh go test ./...
-
-      - name: Compile integration contract
-        run: ../../scripts/with-root-candidate.sh go test -tags=integration ./...
-
-      - name: Race-test module
-        run: ../../scripts/with-root-candidate.sh go test -race ./...
-
-      - name: Vet module
-        run: ../../scripts/with-root-candidate.sh go vet ./...
-
-      - name: Cross-compile portable backends
-        if: matrix.module == 'backend/sftp' || matrix.module == 'backend/http'
-        shell: bash
-        run: |
-          for target in linux/amd64 darwin/arm64 windows/amd64 freebsd/amd64; do
-            GOOS=${target%/*} GOARCH=${target#*/} ../../scripts/with-root-candidate.sh go vet ./...
+          for module in $MODULES; do
+            (cd "$module" && go mod verify && go vet ./... && go test -count=1 ./...)
           done

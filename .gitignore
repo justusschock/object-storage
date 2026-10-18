@@ -31,5 +31,3 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Local implementation plans are intentionally never committed.
-docs/**/*.md
