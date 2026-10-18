@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
 	github.com/aws/smithy-go v1.28.5
 	github.com/johannesboyne/gofakes3 v1.2.0
-	github.com/justusschock/object-storage v0.3.0
+	github.com/justusschock/object-storage v0.1.0
 )
 
 require (

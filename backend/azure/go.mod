@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.2
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.2
-	github.com/justusschock/object-storage v0.3.0
+	github.com/justusschock/object-storage v0.1.0
 )
 
 require (

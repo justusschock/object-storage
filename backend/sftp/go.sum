@@ -1,7 +1,7 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/justusschock/object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
-github.com/justusschock/object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
+github.com/justusschock/object-storage v0.1.0 h1:k711euXLWfTWJ7BA8onW4NoJ18BpDYS9zP+tjY9Lzsc=
+github.com/justusschock/object-storage v0.1.0/go.mod h1:+XYRaBmqvrfuwkrcTCqyJRu2kE8Zolwkgk3kCK2wuls=
 github.com/kr/fs v0.1.0 h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
 github.com/pkg/sftp v1.13.11 h1:0N92SLTB8JqASJB14ZLHHzFnBV8mG9zw4K7jghEFWuE=
