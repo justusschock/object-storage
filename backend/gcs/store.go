@@ -387,7 +387,7 @@ func (store *Store) Get(ctx context.Context, bucket objectstore.Bucket, key obje
 			if errors.Is(mapped, objectstore.ErrNotFound) || errors.Is(mapped, objectstore.ErrPrecondition) {
 				// The generation was replaced or deleted after Attrs.
 				if options.IfMatchVersion != "" {
-					return nil, objectstore.Object{}, fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+					return nil, objectstore.Object{}, fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 				}
 				continue
 			}
@@ -604,28 +604,28 @@ func mapError(err error) error {
 		return err
 	}
 	if errors.Is(err, storage.ErrObjectNotExist) || errors.Is(err, storage.ErrBucketNotExist) {
-		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	var apiError *googleapi.Error
 	if errors.As(err, &apiError) {
 		switch apiError.Code {
 		case http.StatusNotFound:
-			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case http.StatusConflict, http.StatusPreconditionFailed:
-			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case http.StatusRequestedRangeNotSatisfiable:
-			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 		return err
 	}
 	if grpcStatus, ok := status.FromError(err); ok {
 		switch grpcStatus.Code() {
 		case codes.NotFound:
-			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case codes.FailedPrecondition, codes.Aborted:
-			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case codes.OutOfRange:
-			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 	}
 	return err

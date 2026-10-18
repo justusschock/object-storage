@@ -217,7 +217,8 @@ func TestSignedPut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	put := func(body string) *http.Response {
+	// put returns the status and headers; it drains and closes the body.
+	put := func(body string) (int, http.Header) {
 		t.Helper()
 		request, err := http.NewRequestWithContext(ctx, http.MethodPut, signed, bytes.NewReader([]byte(body)))
 		if err != nil {
@@ -233,28 +234,28 @@ func TestSignedPut(t *testing.T) {
 		}
 		_, _ = io.Copy(io.Discard, response.Body)
 		_ = response.Body.Close()
-		return response
+		return response.StatusCode, response.Header
 	}
-	if response := put("too long body"); response.StatusCode != http.StatusBadRequest {
-		t.Fatalf("out-of-range PUT status = %d", response.StatusCode)
+	if status, _ := put("too long body"); status != http.StatusBadRequest {
+		t.Fatalf("out-of-range PUT status = %d", status)
 	}
-	response := put("payload")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("signed PUT status = %d", response.StatusCode)
+	status, header := put("payload")
+	if status != http.StatusOK {
+		t.Fatalf("signed PUT status = %d", status)
 	}
 	sum := md5.Sum([]byte("payload"))
 	attrs, err := client.Bucket("bucket").Object("dir/signed object").Attrs(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Header.Get("ETag") != strconv.Quote(hex.EncodeToString(sum[:])) || response.Header.Get("X-Goog-Generation") != strconv.FormatInt(attrs.Generation, 10) {
-		t.Fatalf("signed PUT headers = %v, generation %d", response.Header, attrs.Generation)
+	if header.Get("ETag") != strconv.Quote(hex.EncodeToString(sum[:])) || header.Get("X-Goog-Generation") != strconv.FormatInt(attrs.Generation, 10) {
+		t.Fatalf("signed PUT headers = %v, generation %d", header, attrs.Generation)
 	}
 	if attrs.Metadata["origin"] != "signed" || attrs.ContentType != "text/plain" || attrs.Size != 7 {
 		t.Fatalf("signed object attrs = %+v", attrs)
 	}
-	if response := put("payload"); response.StatusCode != http.StatusPreconditionFailed {
-		t.Fatalf("second if-generation-match:0 PUT status = %d", response.StatusCode)
+	if status, _ := put("payload"); status != http.StatusPreconditionFailed {
+		t.Fatalf("second if-generation-match:0 PUT status = %d", status)
 	}
 }
 

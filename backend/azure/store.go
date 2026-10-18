@@ -638,22 +638,22 @@ func mapError(err error) error {
 	}
 	switch bloberror.Code(responseError.ErrorCode) {
 	case bloberror.BlobNotFound, bloberror.ContainerNotFound, bloberror.ResourceNotFound:
-		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	case bloberror.ConditionNotMet, bloberror.SourceConditionNotMet, bloberror.TargetConditionNotMet,
 		bloberror.BlobAlreadyExists, bloberror.MD5Mismatch, bloberror.CRC64Mismatch:
-		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	case bloberror.InvalidRange:
-		return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	case bloberror.InvalidBlockList, bloberror.InvalidBlockID, bloberror.InvalidBlobOrBlock:
-		return fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	switch responseError.StatusCode {
 	case http.StatusNotFound:
-		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	case http.StatusPreconditionFailed:
-		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	case http.StatusRequestedRangeNotSatisfiable:
-		return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	return err
 }
@@ -664,7 +664,7 @@ func mapError(err error) error {
 func conditionalWriteError(err error, ifMatch string) error {
 	mapped := mapError(err)
 	if ifMatch != "" && bloberror.HasCode(err, bloberror.BlobNotFound) {
-		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	return mapped
 }

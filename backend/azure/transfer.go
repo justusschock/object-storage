@@ -64,7 +64,7 @@ func (store *Store) putBlocks(ctx context.Context, bucket objectstore.Bucket, ke
 	})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.InvalidBlockList) {
-			return objectstore.Object{}, fmt.Errorf("%w: staged blocks were discarded by a concurrent write: %v", objectstore.ErrPrecondition, err)
+			return objectstore.Object{}, fmt.Errorf("%w: staged blocks were discarded by a concurrent write: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 		return objectstore.Object{}, conditionalWriteError(err, options.IfMatchVersion)
 	}

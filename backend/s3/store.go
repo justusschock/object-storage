@@ -623,24 +623,24 @@ func mapError(err error) error {
 	if errors.As(err, &apiError) {
 		switch apiError.ErrorCode() {
 		case "NoSuchKey", "NoSuchUpload", "NoSuchBucket", "NotFound":
-			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case "PreconditionFailed", "ConditionalRequestConflict", "BadDigest", "XAmzContentSHA256Mismatch":
-			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case "InvalidRange", "RequestedRangeNotSatisfiable":
-			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case "InvalidPart", "InvalidPartOrder", "EntityTooSmall", "TooManyParts":
-			return fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 	}
 	var responseError *smithyhttp.ResponseError
 	if errors.As(err, &responseError) {
 		switch responseError.HTTPStatusCode() {
 		case 404:
-			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case 409, 412:
-			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		case 416:
-			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err)
+			return fmt.Errorf("%w: %v", objectstore.ErrInvalidRange, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 	}
 	return err
@@ -653,7 +653,7 @@ func conditionalWriteError(err error, ifMatch string) error {
 	var apiError smithy.APIError
 	missingUpload := errors.As(err, &apiError) && apiError.ErrorCode() == "NoSuchUpload"
 	if ifMatch != "" && errors.Is(mapped, objectstore.ErrNotFound) && !missingUpload {
-		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err)
+		return fmt.Errorf("%w: %v", objectstore.ErrPrecondition, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	return mapped
 }

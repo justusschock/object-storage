@@ -120,7 +120,7 @@ func (store *Store) Copy(ctx context.Context, srcBucket objectstore.Bucket, srcK
 		if bloberror.HasCode(err, bloberror.CannotVerifyCopySource) {
 			var responseError *azcore.ResponseError
 			if errors.As(err, &responseError) && responseError.StatusCode == http.StatusNotFound {
-				return objectstore.Object{}, fmt.Errorf("%w: %v", objectstore.ErrNotFound, err)
+				return objectstore.Object{}, fmt.Errorf("%w: %v", objectstore.ErrNotFound, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 			}
 		}
 		return objectstore.Object{}, conditionalWriteError(err, options.IfMatchVersion)

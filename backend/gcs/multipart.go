@@ -105,7 +105,7 @@ func (store *Store) PutPart(ctx context.Context, upload objectstore.Upload, numb
 	}, body, digest)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrPrecondition) {
-			return objectstore.CompletedPart{}, fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err)
+			return objectstore.CompletedPart{}, fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 		return objectstore.CompletedPart{}, err
 	}

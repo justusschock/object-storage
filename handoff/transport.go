@@ -125,7 +125,7 @@ func (transport *Transport) Receive(ctx context.Context, receipt lifecyclehandof
 	}
 	metadata, data, err := unmarshalEnvelope(frame)
 	if err != nil {
-		return lifecyclehandoff.Artifact{}, fmt.Errorf("%w: %v", ErrDigestMismatch, err)
+		return lifecyclehandoff.Artifact{}, fmt.Errorf("%w: %v", ErrDigestMismatch, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	dataDigest := sha256.Sum256(data)
 	if metadata.Format != envelopeFormat || metadata.ArtifactID != receipt.ArtifactID || metadata.Digest != receipt.ArtifactID ||
@@ -134,7 +134,7 @@ func (transport *Transport) Receive(ctx context.Context, receipt lifecyclehandof
 	}
 	artifact, err := lifecyclehandoff.NewArtifact(metadata.MediaType, metadata.Version, data, metadata.Metadata)
 	if err != nil {
-		return lifecyclehandoff.Artifact{}, fmt.Errorf("%w: %v", ErrDigestMismatch, err)
+		return lifecyclehandoff.Artifact{}, fmt.Errorf("%w: %v", ErrDigestMismatch, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	if artifact.ID != metadata.ArtifactID || hex.EncodeToString(artifact.Digest[:]) != metadata.Digest {
 		return lifecyclehandoff.Artifact{}, ErrDigestMismatch

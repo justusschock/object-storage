@@ -93,7 +93,7 @@ func (store *Store) PutPart(ctx context.Context, upload objectstore.Upload, numb
 	etag, err := store.uploadPart(ctx, string(custody.Bucket), string(custody.Key), custody.UploadID, number, verifier, size, digest)
 	if err != nil {
 		if errors.Is(err, objectstore.ErrPrecondition) || (verifier.eof && verifier.count < size) {
-			return objectstore.CompletedPart{}, fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err)
+			return objectstore.CompletedPart{}, fmt.Errorf("%w: %v", objectstore.ErrInvalidPart, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 		}
 		return objectstore.CompletedPart{}, err
 	}

@@ -33,7 +33,7 @@ func ParseDigest(value string) (Digest, error) {
 	}
 	decoded, err := hex.DecodeString(encoded)
 	if err != nil {
-		return Digest{}, fmt.Errorf("%w: %v", ErrInvalidDigest, err)
+		return Digest{}, fmt.Errorf("%w: %v", ErrInvalidDigest, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	var digest Digest
 	copy(digest[:], decoded)

@@ -62,7 +62,7 @@ func TestMapError(t *testing.T) {
 						t.Fatalf("mapError(%v) = %v, want unmapped", test.err, got)
 					}
 				}
-				if got != test.err {
+				if got != test.err { //nolint:errorlint // identity: unmapped errors are returned unchanged, not wrapped
 					t.Fatalf("mapError(%v) = %v, want the original error", test.err, got)
 				}
 			case !errors.Is(got, test.want):
@@ -766,7 +766,7 @@ func TestConcurrentGetDuringReplacement(t *testing.T) {
 		data, err := io.ReadAll(body)
 		_ = body.Close()
 		if err != nil || sha256.Sum256(data) != object.SHA256 || int64(len(data)) != object.Size {
-			failure = fmt.Errorf("get returned bytes %q that do not match %#v (%v)", data, object, err)
+			failure = fmt.Errorf("get returned bytes %q that do not match %#v (%w)", data, object, err)
 			break
 		}
 	}

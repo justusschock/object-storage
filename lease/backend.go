@@ -175,7 +175,7 @@ func (backend *Backend) objectKey(key string) (objectstore.Key, error) {
 		objectKey = objectstore.Key(backend.prefix + "/" + key)
 	}
 	if err := objectstore.ValidateKey(objectKey); err != nil {
-		return "", fmt.Errorf("%w: %v", coordination.ErrInvalidRequest, err)
+		return "", fmt.Errorf("%w: %v", coordination.ErrInvalidRequest, err) //nolint:errorlint // one classification per error: the cause is detail, not a second sentinel (ADR-0005)
 	}
 	return objectKey, nil
 }
