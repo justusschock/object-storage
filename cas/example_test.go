@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
-	coordinationmemory "github.com/justusschock/go-distributed-coordination/memory"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/cas"
+	coordinationmemory "github.com/justusschock/distributed-coordination/memory"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/cas"
 )
 
 func ExampleNew() {

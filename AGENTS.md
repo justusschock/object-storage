@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Rules for anyone, human or agent, changing go-object-storage. They are
+Rules for anyone, human or agent, changing object-storage. They are
 binding. If a change has to break one, say so in the pull request and, where
 it is a design decision, record it in an ADR.
 
-go-object-storage is a set of backend-neutral object storage contracts with
+object-storage is a set of backend-neutral object storage contracts with
 exact semantics, their implementations for memory, filesystems, S3, GCS,
 Azure Blob, SFTP and HTTP, and storage layers built on them. Its requirements
 and design decisions are recorded in [docs/](docs/README.md).
@@ -109,7 +109,7 @@ tests. The root module must not import provider or SSH SDKs.
   `time.Sleep` waits in tests, except the few end-to-end tests over real
   network I/O that ADR-0011 lists.
 - Implementations of the library's interfaces pass the public conformance
-  suite (`storetest.Run`; `lease` also passes the `go-distributed-coordination`
+  suite (`storetest.Run`; `lease` also passes the `distributed-coordination`
   conformance suite).
 - Tests are deterministic and pass with `go test -race -count=3 ./...`.
 

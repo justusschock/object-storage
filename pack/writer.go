@@ -14,9 +14,9 @@ import (
 	"sort"
 	"strings"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/cas"
-	multipartupload "github.com/justusschock/go-object-storage/multipart"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/cas"
+	multipartupload "github.com/justusschock/object-storage/multipart"
 )
 
 // Metadata is sufficient to reopen one immutable pack.

@@ -17,7 +17,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 // blockID returns the base64 block ID of block number within the staging

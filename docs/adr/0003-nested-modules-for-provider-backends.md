@@ -53,7 +53,7 @@ We will keep one repository with these modules:
 
 | Module | Path | Contents |
 |---|---|---|
-| root | `github.com/justusschock/go-object-storage` | `objectstore`, `backend/memory`, `backend/fs`, `cas`, `pack`, `multipart`, `lease`, `handoff`, `storetest` |
+| root | `github.com/justusschock/object-storage` | `objectstore`, `backend/memory`, `backend/fs`, `cas`, `pack`, `multipart`, `lease`, `handoff`, `storetest` |
 | `backend/s3` | `…/backend/s3` | AWS SDK v2 adapter |
 | `backend/gcs` | `…/backend/gcs` | Cloud Storage adapter and `gcstest` |
 | `backend/azure` | `…/backend/azure` | Blob Storage adapter and `azuretest` |
@@ -74,7 +74,7 @@ independently of the root and of each other.
 
 1. Tag the root module `vX.Y.Z` on `main`.
 2. In a pull request, raise every nested module that needs the new root to
-   `require github.com/justusschock/go-object-storage vX.Y.Z`, run
+   `require github.com/justusschock/object-storage vX.Y.Z`, run
    `go mod tidy` in it, and merge.
 3. Tag each changed nested module `backend/<name>/vA.B.C` on the merge commit.
 

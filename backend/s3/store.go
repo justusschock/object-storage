@@ -63,7 +63,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const (

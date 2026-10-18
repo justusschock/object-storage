@@ -30,7 +30,7 @@ import (
 	"sync"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 // Factory returns a fresh empty store for one conformance case.

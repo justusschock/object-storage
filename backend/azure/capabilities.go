@@ -14,7 +14,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 // StatMany issues bounded-parallel Get Blob Properties requests

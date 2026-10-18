@@ -5,7 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
-	s3adapter "github.com/justusschock/go-object-storage/backend/s3"
+	s3adapter "github.com/justusschock/object-storage/backend/s3"
 )
 
 func ExampleNewWithOptions() {

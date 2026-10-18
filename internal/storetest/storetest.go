@@ -1,5 +1,5 @@
 // Package storetest forwards to the public conformance suite in
-// github.com/justusschock/go-object-storage/storetest.
+// github.com/justusschock/object-storage/storetest.
 //
 // It exists only for the nested backend modules, whose go.mod files still
 // require a root release (v0.3.0) in which the suite was internal. Once they
@@ -10,7 +10,7 @@ package storetest
 import (
 	"testing"
 
-	"github.com/justusschock/go-object-storage/storetest"
+	"github.com/justusschock/object-storage/storetest"
 )
 
 // Factory is storetest.Factory.

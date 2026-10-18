@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 type record struct {

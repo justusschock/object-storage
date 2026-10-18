@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/azure/azuretest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/azure/azuretest"
 )
 
 type executed struct {

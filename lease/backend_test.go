@@ -9,12 +9,12 @@ import (
 	"testing/synctest"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-distributed-coordination/conformance"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/fs"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/lease"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/distributed-coordination/conformance"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/fs"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/lease"
 )
 
 // FR-OBJ-23

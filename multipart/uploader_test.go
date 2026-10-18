@@ -12,7 +12,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 var (

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/justusschock/go-object-storage/cas"
+	"github.com/justusschock/object-storage/cas"
 )
 
 const (

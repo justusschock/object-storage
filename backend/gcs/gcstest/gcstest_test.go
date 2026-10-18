@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/justusschock/go-object-storage/backend/gcs/gcstest"
+	"github.com/justusschock/object-storage/backend/gcs/gcstest"
 	"google.golang.org/api/googleapi"
 )
 

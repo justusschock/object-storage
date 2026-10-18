@@ -111,8 +111,8 @@ github.com/gorilla/handlers v1.5.2 h1:cLTUSsNkgcwhgRqvCNmdbRWG0A3N4F+M2nWKdScwyE
 github.com/gorilla/handlers v1.5.2/go.mod h1:dX+xVpaxdSw+q0Qek8SSsl3dfMk3jNddUkMzo0GtH0w=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
-github.com/justusschock/go-object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
-github.com/justusschock/go-object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
+github.com/justusschock/object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
+github.com/justusschock/object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
 github.com/klauspost/compress v1.18.2 h1:iiPHWW0YrcFgpBYhsA6D1+fqHssJscY/Tm/y2Uqnapk=
 github.com/klauspost/compress v1.18.2/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
 github.com/klauspost/cpuid/v2 v2.2.11 h1:0OwqZRYI2rFrjS4kvkDnqJkKHdHaRnCm68/DY4OxRzU=

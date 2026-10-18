@@ -3,9 +3,9 @@ package azure
 import (
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/azure/azuretest"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/azure/azuretest"
+	"github.com/justusschock/object-storage/internal/storetest"
 )
 
 // withoutPresign hides the Presigner capability from storetest. The

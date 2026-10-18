@@ -79,6 +79,6 @@ Root module and `backend/s3` v0.3.0.
 Root module and `backend/s3` v0.2.0: the store contract, the memory backend,
 `cas`, `pack`, `multipart`, `handoff`, and the isolated S3 adapter.
 
-[Unreleased]: https://github.com/justusschock/go-object-storage/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/justusschock/go-object-storage/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/justusschock/go-object-storage/releases/tag/v0.2.0
+[Unreleased]: https://github.com/justusschock/object-storage/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/justusschock/object-storage/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/justusschock/object-storage/releases/tag/v0.2.0

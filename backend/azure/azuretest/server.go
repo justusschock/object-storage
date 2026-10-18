@@ -2,7 +2,7 @@
 // endpoint for tests.
 //
 // The fake implements exactly the subset of the Blob service REST API that
-// the azblob SDK issues for the go-object-storage Azure adapter, with
+// the azblob SDK issues for the object-storage Azure adapter, with
 // Azure's status codes, x-ms-error-code headers, and XML error bodies:
 //
 //   - Create Container (PUT ?restype=container);

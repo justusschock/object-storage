@@ -1,6 +1,6 @@
-# go-object-storage
+# object-storage
 
-go-object-storage is a Go library of backend-neutral object storage contracts
+object-storage is a Go library of backend-neutral object storage contracts
 with exact semantics — atomic conditional writes, exact byte ranges, verified
 SHA-256 digests, explicit multipart uploads — and implementations for memory,
 local filesystems, S3-compatible services, Google Cloud Storage, Azure Blob
@@ -33,17 +33,17 @@ want the same behaviour, and the same tests, on every backend.
 ## Installation
 
 ```bash
-go get github.com/justusschock/go-object-storage@latest
+go get github.com/justusschock/object-storage@latest
 ```
 
 Each remote backend is a nested module, so you add only the SDK you use:
 
 ```bash
-go get github.com/justusschock/go-object-storage/backend/s3@latest    # AWS SDK v2, S3-compatible stores
-go get github.com/justusschock/go-object-storage/backend/gcs@latest   # Google Cloud Storage
-go get github.com/justusschock/go-object-storage/backend/azure@latest # Azure Blob Storage
-go get github.com/justusschock/go-object-storage/backend/sftp@latest  # SFTP over SSH
-go get github.com/justusschock/go-object-storage/backend/http@latest  # read-only HTTP(S)
+go get github.com/justusschock/object-storage/backend/s3@latest    # AWS SDK v2, S3-compatible stores
+go get github.com/justusschock/object-storage/backend/gcs@latest   # Google Cloud Storage
+go get github.com/justusschock/object-storage/backend/azure@latest # Azure Blob Storage
+go get github.com/justusschock/object-storage/backend/sftp@latest  # SFTP over SSH
+go get github.com/justusschock/object-storage/backend/http@latest  # read-only HTTP(S)
 ```
 
 Requires Go 1.25 or newer (the tests use `testing/synctest`).
@@ -65,8 +65,8 @@ import (
 	"fmt"
 	"io"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
 )
 
 func main() {
@@ -115,11 +115,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	pkgsftp "github.com/pkg/sftp"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	azureadapter "github.com/justusschock/go-object-storage/backend/azure"
-	gcsadapter "github.com/justusschock/go-object-storage/backend/gcs"
-	httpstore "github.com/justusschock/go-object-storage/backend/http"
-	sftpadapter "github.com/justusschock/go-object-storage/backend/sftp"
+	objectstore "github.com/justusschock/object-storage"
+	azureadapter "github.com/justusschock/object-storage/backend/azure"
+	gcsadapter "github.com/justusschock/object-storage/backend/gcs"
+	httpstore "github.com/justusschock/object-storage/backend/http"
+	sftpadapter "github.com/justusschock/object-storage/backend/sftp"
 )
 
 func newStores(gcsClient *storage.Client, azureClient *azblob.Client, sftpClient *pkgsftp.Client, token string) ([]objectstore.Store, error) {
@@ -156,8 +156,8 @@ The S3 adapter is constructed the same way with `s3adapter.NewWithOptions(client
 | `cas` | root | SHA-256 content-addressed storage with fenced duplicate suppression |
 | `pack` | root | Deterministic immutable pack and index files, one ranged read per blob |
 | `multipart` | root | Bounded-parallel multipart uploads from an `io.ReaderAt` |
-| `lease` | root | Fenced `go-distributed-coordination` leases stored as objects |
-| `handoff` | root | `go-lifecycle` artifact envelopes stored as objects |
+| `lease` | root | Fenced `distributed-coordination` leases stored as objects |
+| `handoff` | root | `lifecycle` artifact envelopes stored as objects |
 | `backend/s3` | `backend/s3` | AWS SDK v2 adapter for S3-compatible stores |
 | `backend/gcs`, `backend/gcs/gcstest` | `backend/gcs` | Google Cloud Storage adapter; in-process GCS server |
 | `backend/azure`, `backend/azure/azuretest` | `backend/azure` | Azure Blob Storage adapter; in-process Blob service |
@@ -216,7 +216,7 @@ Every backend supports exact ranged reads and implements `BatchStater`.
   fenced leases with strictly increasing tokens. Expiry uses the
   participants' clocks, which must agree to well within one TTL; protected
   resources must still check fencing tokens. The backend passes the
-  `go-distributed-coordination` `conformance.Run` suite.
+  `distributed-coordination` `conformance.Run` suite.
 - **Stability.** The module is `v0.x`: a minor release may change the API.
   Every change is listed in [CHANGELOG.md](CHANGELOG.md) and backed by an
   ADR.
@@ -240,7 +240,7 @@ AWS provider chain).
 
 ## Documentation
 
-- API reference: [pkg.go.dev/github.com/justusschock/go-object-storage](https://pkg.go.dev/github.com/justusschock/go-object-storage)
+- API reference: [pkg.go.dev/github.com/justusschock/object-storage](https://pkg.go.dev/github.com/justusschock/object-storage)
   and the nested modules under `backend/`.
 - Requirements and design decisions: [docs/](docs/README.md) — the PRD and
   the ADRs on the store contract, module layout, dependencies, errors,

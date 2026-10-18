@@ -48,7 +48,7 @@ import (
 	"syscall"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const (

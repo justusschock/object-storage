@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/fs"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/fs"
 )
 
 func ExampleNew() {

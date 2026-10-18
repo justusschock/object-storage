@@ -8,9 +8,9 @@ import (
 	"sync"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/gcs/gcstest"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/gcs/gcstest"
+	"github.com/justusschock/object-storage/internal/storetest"
 )
 
 // TestConformance runs the complete store contract, including every optional

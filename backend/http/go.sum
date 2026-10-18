@@ -1,2 +1,2 @@
-github.com/justusschock/go-object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
-github.com/justusschock/go-object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
+github.com/justusschock/object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
+github.com/justusschock/object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=

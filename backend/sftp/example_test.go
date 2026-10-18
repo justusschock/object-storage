@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	sftpadapter "github.com/justusschock/go-object-storage/backend/sftp"
-	"github.com/justusschock/go-object-storage/backend/sftp/sftptest"
+	objectstore "github.com/justusschock/object-storage"
+	sftpadapter "github.com/justusschock/object-storage/backend/sftp"
+	"github.com/justusschock/object-storage/backend/sftp/sftptest"
 )
 
 func ExampleNew() {

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	cache "github.com/justusschock/go-cache"
-	coordination "github.com/justusschock/go-distributed-coordination"
-	objectstore "github.com/justusschock/go-object-storage"
+	cache "github.com/justusschock/cache"
+	coordination "github.com/justusschock/distributed-coordination"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const leaseTTL = time.Minute

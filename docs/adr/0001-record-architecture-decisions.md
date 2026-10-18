@@ -10,7 +10,7 @@
 
 ## Context
 
-Recorded retrospectively for the first public release. go-object-storage
+Recorded retrospectively for the first public release. object-storage
 grew from a root module into a root module plus five nested backend modules,
 with storage layers (content addressing, packs, leases, lifecycle handoff)
 built on one contract. The reasons behind the contract, the module split,

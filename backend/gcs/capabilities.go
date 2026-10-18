@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const maximumPresignExpiry = 7 * 24 * time.Hour

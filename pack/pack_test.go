@@ -12,9 +12,9 @@ import (
 	"sync"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/cas"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/cas"
 )
 
 // FR-OBJ-22

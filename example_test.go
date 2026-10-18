@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
 )
 
 // Example writes an immutable object with a create-only condition and a

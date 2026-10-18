@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/gcs/gcstest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/gcs/gcstest"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"

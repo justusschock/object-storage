@@ -1,4 +1,4 @@
-// Package lease implements go-distributed-coordination fenced leases on top
+// Package lease implements distributed-coordination fenced leases on top
 // of any object store that honors conditional writes.
 //
 // Each coordination key is one small JSON object holding the owner, fencing
@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	objectstore "github.com/justusschock/go-object-storage"
+	coordination "github.com/justusschock/distributed-coordination"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const (

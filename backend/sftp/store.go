@@ -123,7 +123,7 @@ import (
 	"strings"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 	pkgsftp "github.com/pkg/sftp"
 )
 

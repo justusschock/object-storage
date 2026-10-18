@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	coordinationmemory "github.com/justusschock/go-distributed-coordination/memory"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
+	coordination "github.com/justusschock/distributed-coordination"
+	coordinationmemory "github.com/justusschock/distributed-coordination/memory"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
 )
 
 func TestDigestRoundTrip(t *testing.T) {

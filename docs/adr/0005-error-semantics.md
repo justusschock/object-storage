@@ -68,7 +68,7 @@ We will use option 1:
   `http.ErrNotSupported` and `http.ErrReadOnly` (which wraps
   `ErrNotSupported`), plus the typed `*http.StatusError` for unexpected HTTP
   statuses.
-- `lease` reports through the `go-distributed-coordination` vocabulary
+- `lease` reports through the `distributed-coordination` vocabulary
   (`ErrInvalidRequest`, `ErrNotAcquired`, `ErrLeaseLost`).
 - Batch capabilities report per-key failures in their result slices and
   reserve the error return for whole-call failures.

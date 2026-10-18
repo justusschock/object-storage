@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	httpstore "github.com/justusschock/go-object-storage/backend/http"
+	objectstore "github.com/justusschock/object-storage"
+	httpstore "github.com/justusschock/object-storage/backend/http"
 )
 
 func ExampleNew() {

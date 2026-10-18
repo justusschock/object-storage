@@ -48,7 +48,7 @@ We will test with:
 - **Unit tests** in every package, internal (`package x`) where they need
   unexported state, external (`package x_test`) otherwise.
 - **Conformance**: `storetest.Run` for every read/write backend;
-  `go-distributed-coordination`'s `conformance.Run` for `lease`.
+  `distributed-coordination`'s `conformance.Run` for `lease`.
 - **`testing/synctest`** for TTLs, waits, polling, heartbeats, stale-lock
   breaking, presign expiry and bounded parallelism: the lease tests, the
   SFTP lock tests (over an in-memory lock file system), the multipart

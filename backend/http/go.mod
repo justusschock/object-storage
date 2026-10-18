@@ -1,5 +1,5 @@
-module github.com/justusschock/go-object-storage/backend/http
+module github.com/justusschock/object-storage/backend/http
 
 go 1.25.0
 
-require github.com/justusschock/go-object-storage v0.3.0
+require github.com/justusschock/object-storage v0.3.0

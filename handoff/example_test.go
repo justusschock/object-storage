@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	lifecyclehandoff "github.com/justusschock/go-lifecycle/handoff"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/handoff"
+	lifecyclehandoff "github.com/justusschock/lifecycle/handoff"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/handoff"
 )
 
 func ExampleNewTransport() {

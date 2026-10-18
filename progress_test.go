@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 // FR-OBJ-09

@@ -9,8 +9,8 @@ import (
 	"io"
 	"sort"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/cas"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/cas"
 )
 
 // Reader provides digest lookup over one validated immutable pack. It is safe

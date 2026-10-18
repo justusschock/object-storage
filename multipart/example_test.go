@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/multipart"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/multipart"
 )
 
 func ExampleNewUploader() {

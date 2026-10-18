@@ -26,8 +26,8 @@ github.com/google/flatbuffers v25.12.19+incompatible h1:haMV2JRRJCe1998HeW/p0X9U
 github.com/google/flatbuffers v25.12.19+incompatible/go.mod h1:1AeVuKshWv4vARoZatz6mlQ0JxURH0Kv5+zNeJKJCa8=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/justusschock/go-object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
-github.com/justusschock/go-object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
+github.com/justusschock/object-storage v0.3.0 h1:9nRcb32Rp4RiF0iyHUHAKTFXRbMgYDV16FnCoeFH4ug=
+github.com/justusschock/object-storage v0.3.0/go.mod h1:lU6s3151JuzERENJcHHVm8aeP8OvtfwBoctIyYn0cIw=
 github.com/klauspost/compress v1.19.2 h1:hMRETovs/pu/dVWN7zIT1PGG8t509MwT6bO7XSi26R8=
 github.com/klauspost/compress v1.19.2/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.4.0 h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=

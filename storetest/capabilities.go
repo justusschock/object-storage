@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 func runCapabilities(t *testing.T, factory Factory) {

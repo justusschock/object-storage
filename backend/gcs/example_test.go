@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/storage"
-	gcsadapter "github.com/justusschock/go-object-storage/backend/gcs"
+	gcsadapter "github.com/justusschock/object-storage/backend/gcs"
 	"google.golang.org/api/option"
 )
 

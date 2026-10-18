@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/sftp/sftptest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/sftp/sftptest"
 )
 
 func TestNewValidatesArguments(t *testing.T) {

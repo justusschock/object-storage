@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	lifecyclehandoff "github.com/justusschock/go-lifecycle/handoff"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/memory"
+	lifecyclehandoff "github.com/justusschock/lifecycle/handoff"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/memory"
 )
 
 // FR-OBJ-24

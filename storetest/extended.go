@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 // StreamingSize is the body length used by the streaming-put case. It spans

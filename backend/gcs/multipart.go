@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 	"google.golang.org/api/iterator"
 )
 

@@ -51,12 +51,12 @@ requires a new ADR.
 
 | Dependency | Used by | Why |
 |---|---|---|
-| `github.com/justusschock/go-distributed-coordination` | `lease`, `cas` | `lease` implements its `Backend`/`Lease` contract and passes its conformance suite; `cas` fences duplicate uploads with its leases and `KeepAlive`. |
-| `github.com/justusschock/go-cache` | `cas` | optional metadata cache (`cache.Cache[string, objectstore.Object]`). |
-| `github.com/justusschock/go-concurrency` | `multipart` | bounded parallel part uploads. |
-| `github.com/justusschock/go-lifecycle` | `handoff` | `handoff.Transport` stores its `handoff.Artifact` and `Receipt` types. |
+| `github.com/justusschock/distributed-coordination` | `lease`, `cas` | `lease` implements its `Backend`/`Lease` contract and passes its conformance suite; `cas` fences duplicate uploads with its leases and `KeepAlive`. |
+| `github.com/justusschock/cache` | `cas` | optional metadata cache (`cache.Cache[string, objectstore.Object]`). |
+| `github.com/justusschock/concurrency` | `multipart` | bounded parallel part uploads. |
+| `github.com/justusschock/lifecycle` | `handoff` | `handoff.Transport` stores its `handoff.Artifact` and `Receipt` types. |
 
-`github.com/justusschock/go-messaging` appears only indirectly.
+`github.com/justusschock/messaging` appears only indirectly.
 
 **Nested modules** — the provider SDK and nothing else at run time:
 

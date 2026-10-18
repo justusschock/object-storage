@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	azureadapter "github.com/justusschock/go-object-storage/backend/azure"
+	azureadapter "github.com/justusschock/object-storage/backend/azure"
 )
 
 func ExampleNew() {

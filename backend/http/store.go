@@ -63,7 +63,7 @@ import (
 	"strings"
 	"sync"
 
-	objectstore "github.com/justusschock/go-object-storage"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const defaultStatConcurrency = 16

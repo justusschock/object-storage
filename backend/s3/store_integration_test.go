@@ -15,8 +15,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/internal/storetest"
 )
 
 func TestIntegrationConformance(t *testing.T) {

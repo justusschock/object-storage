@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	coordination "github.com/justusschock/go-distributed-coordination"
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/lease"
+	coordination "github.com/justusschock/distributed-coordination"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/lease"
 )
 
 func ExampleNew() {

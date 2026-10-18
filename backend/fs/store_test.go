@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/fs"
-	"github.com/justusschock/go-object-storage/storetest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/fs"
+	"github.com/justusschock/object-storage/storetest"
 )
 
 // FR-OBJ-12, FR-OBJ-19

@@ -1,4 +1,4 @@
-# PRD 0001: go-object-storage
+# PRD 0001: object-storage
 
 | Field | Value |
 |---|---|
@@ -22,7 +22,7 @@ identifiers, digest support and errors. Code that needs exact semantics
 is rewritten per provider, and tests need either cloud accounts or slow
 emulators.
 
-go-object-storage defines one backend-neutral contract with exact semantics,
+object-storage defines one backend-neutral contract with exact semantics,
 implements it for those six media, and builds reusable layers on top:
 content-addressed storage, immutable packs, multipart orchestration, fenced
 leases and lifecycle artifact handoff.
@@ -92,8 +92,8 @@ leases and lifecycle artifact handoff.
 | FR-OBJ-20 | `multipart.Uploader` uploads an `io.ReaderAt` in fixed parts with bounded parallelism, completes parts in order, declares a verified whole-object digest at `BeginMultipart`, and aborts exactly once on failure. | MUST |
 | FR-OBJ-21 | `cas.Store` stores content once per SHA-256 digest under a fenced lease, verifies every byte of full reads (`ErrDigestMismatch`), serves exact ranged reads, and fails when the lease is lost. | MUST |
 | FR-OBJ-22 | `pack.Writer` commits blobs into a deterministic data object and index; `pack.Reader` validates the index and serves each blob with one exact ranged read, detecting truncation and tampering (`ErrInvalidPack`). | MUST |
-| FR-OBJ-23 | `lease.Backend` implements `go-distributed-coordination` fenced leases on any store: one holder at a time, strictly increasing fencing tokens across release and expiry, expiry at the TTL, waiting acquisition that polls and wakes at expiry, and cancellation. | MUST |
-| FR-OBJ-24 | `handoff.Transport` stores `go-lifecycle` artifacts as canonical, digest-bound envelopes; sends are idempotent; tampered or misbound envelopes fail with `ErrDigestMismatch`. | MUST |
+| FR-OBJ-23 | `lease.Backend` implements `distributed-coordination` fenced leases on any store: one holder at a time, strictly increasing fencing tokens across release and expiry, expiry at the TTL, waiting acquisition that polls and wakes at expiry, and cancellation. | MUST |
+| FR-OBJ-24 | `handoff.Transport` stores `lifecycle` artifacts as canonical, digest-bound envelopes; sends are idempotent; tampered or misbound envelopes fail with `ErrDigestMismatch`. | MUST |
 | FR-OBJ-25 | Backends classify provider errors onto the root sentinel errors (one class per error) and return unclassified errors unchanged. | MUST |
 
 ## 5. Non-functional requirements

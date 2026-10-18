@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/justusschock/go-object-storage/backend/memory"
-	"github.com/justusschock/go-object-storage/cas"
-	"github.com/justusschock/go-object-storage/pack"
+	"github.com/justusschock/object-storage/backend/memory"
+	"github.com/justusschock/object-storage/cas"
+	"github.com/justusschock/object-storage/pack"
 )
 
 func Example() {

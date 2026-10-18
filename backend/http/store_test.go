@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	httpstore "github.com/justusschock/go-object-storage/backend/http"
+	objectstore "github.com/justusschock/object-storage"
+	httpstore "github.com/justusschock/object-storage/backend/http"
 )
 
 var modified = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)

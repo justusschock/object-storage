@@ -3,9 +3,9 @@ package sftp
 import (
 	"testing"
 
-	objectstore "github.com/justusschock/go-object-storage"
-	"github.com/justusschock/go-object-storage/backend/sftp/sftptest"
-	"github.com/justusschock/go-object-storage/internal/storetest"
+	objectstore "github.com/justusschock/object-storage"
+	"github.com/justusschock/object-storage/backend/sftp/sftptest"
+	"github.com/justusschock/object-storage/internal/storetest"
 )
 
 // TestConformance runs the complete store contract, including every optional

@@ -83,7 +83,7 @@ Changes made for the release:
 - Removed unexported test-only clock hooks (the `now` fields of the
   filesystem and SFTP stores, the clock parameter of the Azure fake's
   service); tests use `testing/synctest` instead (ADR-0011).
-- `lease.Options.Clock` stays: it is the `go-distributed-coordination`
+- `lease.Options.Clock` stays: it is the `distributed-coordination`
   `Clock` abstraction, and that library's conformance suite drives time
   through it.
 

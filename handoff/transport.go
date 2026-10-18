@@ -15,8 +15,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	lifecyclehandoff "github.com/justusschock/go-lifecycle/handoff"
-	objectstore "github.com/justusschock/go-object-storage"
+	lifecyclehandoff "github.com/justusschock/lifecycle/handoff"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const envelopeFormat = "go-object-storage/handoff/v1"

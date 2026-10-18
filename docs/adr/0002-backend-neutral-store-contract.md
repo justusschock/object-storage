@@ -84,7 +84,7 @@ We will define the contract in the root package `objectstore` as:
   `backend/` and expose a concrete `*Store` with a `New` constructor and,
   where needed, an `Options` struct.
 - No generics in the contract. Generics appear only where a sibling library
-  defines them (`cas.New` accepts a `go-cache` `Cache[string, Object]`).
+  defines them (`cas.New` accepts a `cache` `Cache[string, Object]`).
 
 ## Consequences
 

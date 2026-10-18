@@ -9,8 +9,8 @@ import (
 	"io"
 	"sort"
 
-	concurrency "github.com/justusschock/go-concurrency"
-	objectstore "github.com/justusschock/go-object-storage"
+	concurrency "github.com/justusschock/concurrency"
+	objectstore "github.com/justusschock/object-storage"
 )
 
 const (
