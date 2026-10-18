@@ -67,6 +67,7 @@ func TestPutSignsSmallBodiesWithTheirDigest(t *testing.T) {
 	}
 }
 
+// FR-OBJ-13
 func TestPutStreamingPathsAvoidSpoolingWhenPossible(t *testing.T) {
 	fake := newFakeS3(t)
 	// An unusable spool directory proves which paths spool.
@@ -99,6 +100,7 @@ func TestPutStreamingPathsAvoidSpoolingWhenPossible(t *testing.T) {
 	}
 }
 
+// FR-OBJ-05, FR-OBJ-13
 func TestPutStreamingDigestMismatchAbortsWithoutPublishing(t *testing.T) {
 	fake := newFakeS3(t)
 	store := fake.store(t, Options{PartSize: testPartSize})
@@ -116,6 +118,7 @@ func TestPutStreamingDigestMismatchAbortsWithoutPublishing(t *testing.T) {
 	}
 }
 
+// FR-OBJ-05, FR-OBJ-13
 func TestForeignObjectsReportUnknownDigestWithoutDownloading(t *testing.T) {
 	fake := newFakeS3(t)
 	store := fake.store(t, Options{})
@@ -177,6 +180,7 @@ func TestListUsesListingMetadataWithoutHeadRequests(t *testing.T) {
 	}
 }
 
+// FR-OBJ-06, FR-OBJ-13
 func TestMultipartCompletesInPlaceAndIdempotently(t *testing.T) {
 	fake := newFakeS3(t)
 	store := fake.store(t, Options{})
@@ -342,6 +346,7 @@ func TestPresignRequiresSDKClient(t *testing.T) {
 	}
 }
 
+// FR-OBJ-07, FR-OBJ-13
 func TestDeleteManyMapsPerKeyErrors(t *testing.T) {
 	client := &stubClient{deleteErrors: []types.Error{
 		{Key: aws.String("denied"), Code: aws.String("AccessDenied"), Message: aws.String("no")},
@@ -361,6 +366,7 @@ func TestDeleteManyMapsPerKeyErrors(t *testing.T) {
 	}
 }
 
+// FR-OBJ-25
 func TestMapsS3Errors(t *testing.T) {
 	for code, want := range map[string]error{
 		"NoSuchKey": objectstore.ErrNotFound, "NoSuchUpload": objectstore.ErrNotFound,
@@ -403,6 +409,7 @@ func (client *stubClient) DeleteObjects(_ context.Context, input *awss3.DeleteOb
 	return &awss3.DeleteObjectsOutput{Errors: client.deleteErrors}, nil
 }
 
+// FR-OBJ-13
 func TestNoHeadAfterWriteReturnsTheAcknowledgedObject(t *testing.T) {
 	fake := newFakeS3(t)
 	ctx := context.Background()

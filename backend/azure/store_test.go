@@ -19,6 +19,7 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
+// FR-OBJ-25
 func TestMapError(t *testing.T) {
 	for _, test := range []struct {
 		code   string
@@ -64,6 +65,7 @@ func TestMapError(t *testing.T) {
 	}
 }
 
+// FR-OBJ-15
 func TestMetadataValidation(t *testing.T) {
 	normalized, err := normalizeMetadata(map[string]string{"Owner": "caller", "_x1": "", "snake_Case": "a b"})
 	if err != nil || !reflect.DeepEqual(normalized, map[string]string{"owner": "caller", "_x1": "", "snake_case": "a b"}) {
@@ -333,6 +335,7 @@ func TestPutPartRejectsUploadForAnotherKey(t *testing.T) {
 // TestStreamingPutLosesToConcurrentWrite shows Azure discarding a streamed
 // Put's uncommitted blocks when another writer publishes the key first; the
 // streamed Put fails with ErrPrecondition and the winner stays published.
+// FR-OBJ-15
 func TestStreamingPutLosesToConcurrentWrite(t *testing.T) {
 	store := newTestStore(t, Options{BlockSize: 64 << 10, Concurrency: 1})
 	ctx := context.Background()
@@ -398,6 +401,7 @@ func TestCopyOverrides(t *testing.T) {
 	}
 }
 
+// FR-OBJ-10, FR-OBJ-15
 func TestPutCancellationDuringStreaming(t *testing.T) {
 	store := newTestStore(t, Options{BlockSize: 64 << 10})
 	ctx, cancel := context.WithCancel(context.Background())

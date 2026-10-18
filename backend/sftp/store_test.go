@@ -180,6 +180,7 @@ func TestCopyHardLinksWhenSupported(t *testing.T) {
 // TestCompareAndSwapAcrossStores increments one counter through two Store
 // values on separate SSH connections, which coordinate only through the
 // remote lock file, as separate processes would.
+// FR-OBJ-04, FR-OBJ-16
 func TestCompareAndSwapAcrossStores(t *testing.T) {
 	for _, test := range []struct {
 		name    string
@@ -295,6 +296,7 @@ func TestStaleLockFileIsBroken(t *testing.T) {
 	}
 }
 
+// FR-OBJ-10, FR-OBJ-16
 func TestGetBodyIsBoundToContext(t *testing.T) {
 	store := newTestStore(t, sftptest.Options{}, Options{})
 	if _, err := store.Put(context.Background(), "objects", "key", bytes.NewReader(make([]byte, 1<<20)), objectstore.PutOptions{}); err != nil {

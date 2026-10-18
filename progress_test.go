@@ -10,6 +10,7 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
+// FR-OBJ-09
 func TestWithProgressReportsCumulativeBytes(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +61,7 @@ func (recorder closeRecorder) Close() error {
 	return nil
 }
 
+// FR-OBJ-05
 func TestObjectDigestAndOptionHelpers(t *testing.T) {
 	t.Parallel()
 

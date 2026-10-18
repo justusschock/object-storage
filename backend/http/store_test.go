@@ -110,6 +110,7 @@ func read(t *testing.T, body io.ReadCloser) []byte {
 // TestReadContract runs the read subset of the store contract (put/get/stat
 // consistency, conditional reads, exact ranges, not-found, cancellation)
 // against a static file server.
+// FR-OBJ-17
 func TestReadContract(t *testing.T) {
 	ctx := context.Background()
 	server := &dirServer{digest: true, metadata: map[string]string{"owner": "caller"}}
@@ -212,6 +213,7 @@ func TestReadContract(t *testing.T) {
 	})
 }
 
+// FR-OBJ-17
 func TestReadOnly(t *testing.T) {
 	store, err := httpstore.New("https://example.com", httpstore.Options{})
 	if err != nil {
@@ -233,6 +235,7 @@ func TestReadOnly(t *testing.T) {
 	}
 }
 
+// FR-OBJ-17
 func TestServerIgnoringRange(t *testing.T) {
 	store, _ := newServer(t, &dirServer{ignoreRange: true}, map[string]string{"remote/objects/range": "abcdefghij"})
 	ctx := context.Background()

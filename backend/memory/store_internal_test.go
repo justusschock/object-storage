@@ -11,6 +11,7 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
+// FR-OBJ-10, FR-OBJ-11
 func TestPutCanceledWhileWaitingForLockDoesNotMutate(t *testing.T) {
 	store := New()
 	store.mu.Lock()

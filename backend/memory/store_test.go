@@ -8,6 +8,7 @@ import (
 	"github.com/justusschock/go-object-storage/storetest"
 )
 
+// FR-OBJ-11
 func TestStoreContract(t *testing.T) {
 	storetest.Run(t, func(*testing.T) objectstore.MultipartStore {
 		return memory.New()

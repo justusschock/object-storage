@@ -34,6 +34,7 @@ func TestDigestRoundTrip(t *testing.T) {
 	}
 }
 
+// FR-OBJ-21
 func TestPutDeduplicatesConcurrentWriters(t *testing.T) {
 	objects := &countingStore{Store: memory.New()}
 	coordination := coordinationmemory.NewBackend(nil)
@@ -74,6 +75,7 @@ func TestPutDeduplicatesConcurrentWriters(t *testing.T) {
 	}
 }
 
+// FR-OBJ-21
 func TestOpenFullReadDetectsCorruptionAtEOF(t *testing.T) {
 	underlying := memory.New()
 	objects := &digestMetadataStore{Store: underlying}
@@ -113,6 +115,7 @@ func TestOpenRejectsCorruptFullReadMetadata(t *testing.T) {
 	}
 }
 
+// FR-OBJ-21
 func TestPutReportsLeaseLoss(t *testing.T) {
 	objects := &countingStore{Store: memory.New()}
 	store, err := New(objects, "blobs", "sha256", nil, losingBackend{}, "writer")
@@ -163,6 +166,7 @@ func TestNewAndPutRejectTypedNilInputs(t *testing.T) {
 	}
 }
 
+// FR-OBJ-21
 func TestOpenRangeUsesExactBytes(t *testing.T) {
 	objects := memory.New()
 	store, err := New(objects, "blobs", "sha256", nil, coordinationmemory.NewBackend(nil), "writer")

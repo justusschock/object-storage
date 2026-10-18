@@ -17,6 +17,7 @@ import (
 	"github.com/justusschock/go-object-storage/lease"
 )
 
+// FR-OBJ-23
 func TestConformanceMemoryStore(t *testing.T) {
 	conformance.Run(t, func(t *testing.T) (coordination.Backend, func(time.Duration)) {
 		clock := newFakeClock(time.Unix(100, 0))
@@ -35,6 +36,7 @@ func TestConformanceFilesystemStore(t *testing.T) {
 	})
 }
 
+// FR-OBJ-23
 func TestExpiryClosesDoneAtTTL(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, memory.New(), lease.Options{})
@@ -82,6 +84,7 @@ func TestRenewExtendsFromCurrentTime(t *testing.T) {
 	})
 }
 
+// FR-OBJ-23
 func TestWaitPollsUntilRelease(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, memory.New(), lease.Options{PollInterval: 2 * time.Second})
@@ -122,6 +125,7 @@ func TestWaitWakesAtHolderExpiry(t *testing.T) {
 	})
 }
 
+// FR-OBJ-10, FR-OBJ-23
 func TestWaitHonorsCancellation(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, memory.New(), lease.Options{})
@@ -137,6 +141,7 @@ func TestWaitHonorsCancellation(t *testing.T) {
 	})
 }
 
+// FR-OBJ-23
 func TestConcurrentAcquireGrantsOneHolder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := newBackend(t, memory.New(), lease.Options{})

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+// FR-OBJ-18
 func TestNewServerBucketsAndCleanup(t *testing.T) {
 	ctx := context.Background()
 	client, cleanup := gcstest.NewServer(t, "alpha", "beta")
@@ -51,6 +52,7 @@ func TestNewServerBucketsAndCleanup(t *testing.T) {
 	}
 }
 
+// FR-OBJ-18
 func TestUploadPreconditions(t *testing.T) {
 	client, _ := gcstest.NewServer(t, "bucket")
 	large := bytes.Repeat([]byte("x"), 1<<20)

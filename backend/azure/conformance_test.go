@@ -32,6 +32,7 @@ func newTestStore(t *testing.T, options Options) *Store {
 // TestConformance runs the complete store contract and the batch and copy
 // capabilities against the in-process Azure fake. The 4 MiB block size
 // drives the staged-block streaming path with the contract's 11 MiB bodies.
+// FR-OBJ-15, FR-OBJ-19
 func TestConformance(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) objectstore.MultipartStore {
 		store := newTestStore(t, Options{BlockSize: 4 << 20, Concurrency: 2})

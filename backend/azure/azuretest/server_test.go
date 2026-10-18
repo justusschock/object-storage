@@ -50,6 +50,7 @@ func download(t *testing.T, client *azblob.Client, name string, options *blob.Do
 	return string(data), response, err
 }
 
+// FR-OBJ-18
 func TestRoundTripWithMetadataAndProperties(t *testing.T) {
 	client, _ := NewClient(t, "objects")
 	metadata := map[string]*string{"owner": to.Ptr("caller"), "a_b": to.Ptr("1"), "ab": to.Ptr("2"), "a1": to.Ptr("3"), "Z": to.Ptr("4")}
@@ -268,6 +269,7 @@ func TestCopy(t *testing.T) {
 	}
 }
 
+// FR-OBJ-18
 func TestSharedAccessSignatures(t *testing.T) {
 	server := NewServer(t, "objects")
 	client := server.NewClient(t)

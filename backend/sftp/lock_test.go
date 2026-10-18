@@ -118,6 +118,7 @@ type lockResult struct {
 	err     error
 }
 
+// FR-OBJ-16
 func TestLockContentionAcrossProcesses(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fs := newMemoryLockFS()
@@ -153,6 +154,7 @@ func TestLockContentionAcrossProcesses(t *testing.T) {
 	})
 }
 
+// FR-OBJ-16
 func TestStaleLockIsBroken(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fs := newMemoryLockFS()

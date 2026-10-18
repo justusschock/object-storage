@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// FR-OBJ-18
 func TestPasswordAuthentication(t *testing.T) {
 	server := NewServer(t)
 	client := server.Client(t)
@@ -80,6 +81,7 @@ func TestRejectedCredentials(t *testing.T) {
 	}
 }
 
+// FR-OBJ-18
 func TestExtensions(t *testing.T) {
 	server := NewServer(t)
 	client := server.Client(t)

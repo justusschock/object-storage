@@ -14,6 +14,7 @@ import (
 	"github.com/justusschock/go-object-storage/backend/memory"
 )
 
+// FR-OBJ-24
 func TestTransportRoundTripsDefensiveArtifactCopies(t *testing.T) {
 	objects := memory.New()
 	transport, err := NewTransport(objects, "handoffs", "artifacts")
@@ -46,6 +47,7 @@ func TestTransportRoundTripsDefensiveArtifactCopies(t *testing.T) {
 	}
 }
 
+// FR-OBJ-24
 func TestTransportRejectsTamperedArtifact(t *testing.T) {
 	objects := memory.New()
 	transport, err := NewTransport(objects, "handoffs", "artifacts")
@@ -101,6 +103,7 @@ func TestTransportValidatesReceiptsAndCancellation(t *testing.T) {
 	}
 }
 
+// FR-OBJ-24
 func TestTransportSendIsIdempotent(t *testing.T) {
 	objects := memory.New()
 	transport, err := NewTransport(objects, "handoffs", "artifacts")

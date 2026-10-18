@@ -21,12 +21,14 @@ import (
 	"github.com/justusschock/go-object-storage/storetest"
 )
 
+// FR-OBJ-12, FR-OBJ-19
 func TestConformance(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) objectstore.MultipartStore {
 		return newStore(t)
 	})
 }
 
+// FR-OBJ-03, FR-OBJ-12
 func TestListOrdersNestedAndEscapedKeys(t *testing.T) {
 	store := newStore(t)
 	keys := []objectstore.Key{"a", "a/b", "a-c", "a/b/c", "a0", "@x", "@@y/z", "b/@object.json", "b/@data-1", "a/.hidden", "ü/对象"}
@@ -128,6 +130,7 @@ func TestDeletePrunesDirectoriesAndKeepsSiblings(t *testing.T) {
 	}
 }
 
+// FR-OBJ-07, FR-OBJ-12
 func TestCopyHardLinksImmutableData(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
@@ -153,6 +156,7 @@ func TestCopyHardLinksImmutableData(t *testing.T) {
 	}
 }
 
+// FR-OBJ-12
 func TestReaderSurvivesConcurrentReplacement(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
@@ -175,6 +179,7 @@ func TestReaderSurvivesConcurrentReplacement(t *testing.T) {
 	}
 }
 
+// FR-OBJ-12
 func TestStagingFilesAreRemoved(t *testing.T) {
 	store := newStore(t)
 	ctx := context.Background()
@@ -201,6 +206,7 @@ const (
 // TestCrossProcessConditionalWrites runs several OS processes against one
 // root. Exactly one IfAbsent writer may win, and IfMatchVersion increments
 // must never be lost, which requires the file lock to exclude processes.
+// FR-OBJ-04, FR-OBJ-12
 func TestCrossProcessConditionalWrites(t *testing.T) {
 	if os.Getenv(helperEnvironment) != "" {
 		t.Skip("helper process")

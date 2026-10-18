@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// FR-OBJ-25
 func TestMapError(t *testing.T) {
 	plain := errors.New("plain")
 	for _, test := range []struct {
@@ -108,6 +109,7 @@ func TestParseVersion(t *testing.T) {
 	}
 }
 
+// FR-OBJ-14
 func TestVersionIsGeneration(t *testing.T) {
 	store := newTestStore(t, Options{})
 	ctx := context.Background()
@@ -135,6 +137,7 @@ func TestVersionIsGeneration(t *testing.T) {
 	}
 }
 
+// FR-OBJ-14
 func TestPutBodyPaths(t *testing.T) {
 	store := newTestStore(t, Options{ChunkSize: 256 << 10, BufferSize: 300 << 10})
 	ctx := context.Background()
@@ -380,6 +383,7 @@ func TestReservedPrefixRejected(t *testing.T) {
 	}
 }
 
+// FR-OBJ-06, FR-OBJ-14
 func TestMultipartHierarchicalCompose(t *testing.T) {
 	for _, test := range []struct {
 		parts, fanIn int
@@ -576,6 +580,7 @@ func TestCopyOverrides(t *testing.T) {
 	}
 }
 
+// FR-OBJ-07, FR-OBJ-14
 func TestPresignShape(t *testing.T) {
 	store := newTestStore(t, Options{})
 	ctx := context.Background()
@@ -684,6 +689,7 @@ func TestPresignShape(t *testing.T) {
 	}
 }
 
+// FR-OBJ-07, FR-OBJ-14
 func TestBatchOperations(t *testing.T) {
 	store := newTestStore(t, Options{Concurrency: 3})
 	ctx := context.Background()

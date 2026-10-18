@@ -10,6 +10,7 @@ import (
 	objectstore "github.com/justusschock/go-object-storage"
 )
 
+// FR-OBJ-01
 func TestValidateBucket(t *testing.T) {
 	t.Parallel()
 
@@ -25,6 +26,7 @@ func TestValidateBucket(t *testing.T) {
 	}
 }
 
+// FR-OBJ-01
 func TestValidateKey(t *testing.T) {
 	t.Parallel()
 
@@ -52,6 +54,7 @@ func TestValidateKey(t *testing.T) {
 	}
 }
 
+// FR-OBJ-02
 func TestByteRangeValidate(t *testing.T) {
 	t.Parallel()
 
@@ -74,6 +77,7 @@ func TestByteRangeValidate(t *testing.T) {
 	}
 }
 
+// FR-OBJ-08
 func TestContractClonesOwnMutableFields(t *testing.T) {
 	t.Parallel()
 
@@ -145,6 +149,7 @@ func TestContractClonesOwnMutableFields(t *testing.T) {
 	}
 }
 
+// FR-OBJ-08
 func TestContractClonesPreserveNilFields(t *testing.T) {
 	t.Parallel()
 

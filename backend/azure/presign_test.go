@@ -56,6 +56,7 @@ func execute(t *testing.T, presigned objectstore.PresignedRequest, body []byte) 
 // TestPresign covers the storetest presign flow with Azure's one deviation:
 // Put Block responses carry no ETag, so the presigned part is completed with
 // an empty CompletedPart.ETag.
+// FR-OBJ-07, FR-OBJ-15
 func TestPresign(t *testing.T) {
 	for name, options := range map[string]func(*azuretest.Server) Options{
 		"client credential":   func(*azuretest.Server) Options { return Options{} },

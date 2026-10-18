@@ -18,6 +18,7 @@ import (
 // buffer sizes drive resumable uploads and the spooling path with the
 // contract's 11 MiB bodies. Presigned requests are executed against the fake,
 // which does not verify signatures; a generated RSA key signs them.
+// FR-OBJ-14, FR-OBJ-19
 func TestConformance(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) objectstore.MultipartStore {
 		return newTestStore(t, Options{ChunkSize: 1 << 20, BufferSize: 1 << 20, Concurrency: 4})

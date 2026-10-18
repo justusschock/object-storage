@@ -20,6 +20,7 @@ var (
 	errAbort    = errors.New("injected abort failure")
 )
 
+// FR-OBJ-20
 func TestUploaderOrdersPartsAndBoundsParallelism(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := &recordingMultipart{}
@@ -43,6 +44,7 @@ func TestUploaderOrdersPartsAndBoundsParallelism(t *testing.T) {
 	})
 }
 
+// FR-OBJ-20
 func TestUploaderAbortsOnceOnPartFailure(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		backend := &recordingMultipart{failPart: 3}
@@ -191,6 +193,7 @@ func slicesEqual(left, right []int) bool {
 	return true
 }
 
+// FR-OBJ-20
 func TestUploaderDeclaresVerifiedWholeObjectDigest(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		data := bytes.Repeat([]byte("digest"), 3000)

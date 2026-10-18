@@ -17,6 +17,7 @@ import (
 	"github.com/justusschock/go-object-storage/cas"
 )
 
+// FR-OBJ-22
 func TestPackCommitIsDeterministicAndReadsOneRange(t *testing.T) {
 	digestA := cas.Digest(sha256.Sum256([]byte("a")))
 	digestB := cas.Digest(sha256.Sum256([]byte("bb")))
@@ -90,6 +91,7 @@ func TestWriterRejectsDuplicateAndMismatchedDigests(t *testing.T) {
 	}
 }
 
+// FR-OBJ-22
 func TestOpenReaderRejectsTruncatedAndOverflowingIndexes(t *testing.T) {
 	digest := cas.Digest(sha256.Sum256([]byte("a")))
 	for _, test := range []struct {
@@ -118,6 +120,7 @@ func TestOpenReaderRejectsTruncatedAndOverflowingIndexes(t *testing.T) {
 	}
 }
 
+// FR-OBJ-22
 func TestReaderDetectsSameSizeDataTampering(t *testing.T) {
 	digest := cas.Digest(sha256.Sum256([]byte("value")))
 	objects := memory.New()
