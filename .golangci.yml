@@ -1,0 +1,18 @@
+version: "2"
+
+run:
+  # Lint the tagged S3 integration test as well.
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
