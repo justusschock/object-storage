@@ -62,7 +62,6 @@ const (
 // Store is a filesystem object store rooted at one directory.
 type Store struct {
 	root string
-	now  func() time.Time
 }
 
 // New opens a store rooted at directory, creating the directory if needed.
@@ -77,7 +76,7 @@ func New(directory string) (*Store, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, fmt.Errorf("fs store: create root: %w", err)
 	}
-	return &Store{root: root, now: time.Now}, nil
+	return &Store{root: root}, nil
 }
 
 // Root returns the absolute root directory.
@@ -591,7 +590,7 @@ func (store *Store) commitWith(ctx context.Context, bucket objectstore.Bucket, k
 		return objectstore.Object{}, err
 	}
 	record.Version = version
-	record.ModifiedAt = store.now().UTC()
+	record.ModifiedAt = time.Now().UTC()
 	record.Metadata = cloneMetadata(record.Metadata)
 	data, err := json.Marshal(record)
 	if err != nil {

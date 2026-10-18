@@ -318,7 +318,7 @@ func TestSharedAccessSignatures(t *testing.T) {
 // clock advances deterministically past the signed expiry.
 func TestSASExpiry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		svc, err := newService(AccountName, AccountKey, nil)
+		svc, err := newService(AccountName, AccountKey)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -355,7 +355,7 @@ func TestSASExpiry(t *testing.T) {
 
 func TestRequestDateSkew(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		svc, err := newService(AccountName, AccountKey, nil)
+		svc, err := newService(AccountName, AccountKey)
 		if err != nil {
 			t.Fatal(err)
 		}

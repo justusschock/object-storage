@@ -178,7 +178,6 @@ type Store struct {
 	hardlink    bool
 	fsync       bool
 	locker      *bucketLocker
-	now         func() time.Time
 }
 
 // New opens a store rooted at the remote directory root, creating it if
@@ -202,7 +201,7 @@ func New(client *pkgsftp.Client, root string, options Options) (*Store, error) {
 	if err := client.MkdirAll(root); err != nil {
 		return nil, fmt.Errorf("sftp store: create root: %w", err)
 	}
-	store := &Store{client: client, root: root, now: time.Now}
+	store := &Store{client: client, root: root}
 	_, store.posixRename = client.HasExtension(extensionPosixRename)
 	_, store.hardlink = client.HasExtension(extensionHardlink)
 	version, ok := client.HasExtension(extensionFsync)
@@ -548,7 +547,7 @@ func (store *Store) commitWith(ctx context.Context, bucket objectstore.Bucket, k
 		return objectstore.Object{}, err
 	}
 	record.Version = version
-	record.ModifiedAt = store.now().UTC()
+	record.ModifiedAt = time.Now().UTC()
 	record.Metadata = cloneMetadata(record.Metadata)
 	data, err := json.Marshal(record)
 	if err != nil {

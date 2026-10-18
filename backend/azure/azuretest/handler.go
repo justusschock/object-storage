@@ -72,23 +72,21 @@ type service struct {
 	mu         sync.Mutex
 	account    string
 	key        []byte
-	clock      func() time.Time
 	containers map[string]*containerRecord
 	sequence   uint64
 }
 
-func newService(account, key string, clock func() time.Time) (*service, error) {
+func newService(account, key string) (*service, error) {
 	decoded, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
 		return nil, fmt.Errorf("azuretest: decode account key: %w", err)
 	}
-	if clock == nil {
-		clock = time.Now
-	}
-	return &service{account: account, key: decoded, clock: clock, containers: map[string]*containerRecord{}}, nil
+	return &service{account: account, key: decoded, containers: map[string]*containerRecord{}}, nil
 }
 
-func (svc *service) now() time.Time { return svc.clock().UTC() }
+// now is the service clock. Tests that run the handler inside a
+// testing/synctest bubble get virtual time from it.
+func (svc *service) now() time.Time { return time.Now().UTC() }
 
 // nextETag returns a fresh quoted entity tag; callers hold mu.
 func (svc *service) nextETag() string {

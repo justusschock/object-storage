@@ -77,7 +77,7 @@ func NewServer(tb testing.TB, containers ...string) *Server {
 	if err != nil {
 		tb.Fatal(err)
 	}
-	svc, err := newService(AccountName, AccountKey, nil)
+	svc, err := newService(AccountName, AccountKey)
 	if err != nil {
 		tb.Fatal(err)
 	}
