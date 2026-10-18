@@ -17,10 +17,9 @@ contract or implementation detail. Constraints:
 - Downstream projects import the root package, `backend/memory`,
   `backend/fs`, `cas`, `lease`, every nested backend and the `azuretest`,
   `gcstest` and `sftptest` fakes. None of that may move or disappear.
-- The nested modules are themselves consumers of the root module: they
-  require root `v0.3.0` and use `ValidateBucket`, `ValidateKey`,
-  `PutOptions.ValidateSize`, `Object.Digest`, the `Clone` methods and the
-  internal conformance suite of that release.
+- The nested modules are themselves consumers of the root module: they use
+  `ValidateBucket`, `ValidateKey`, `PutOptions.ValidateSize`,
+  `Object.Digest`, the `Clone` methods and the conformance suite.
 - The conformance suite was `internal/storetest`, so implementers outside
   this repository could not run it; at least one downstream project kept a
   vendored copy and a test that compared it with the upstream file.
@@ -34,19 +33,17 @@ contract or implementation detail. Constraints:
 
 ## Considered options
 
-1. **Keep the existing surface, publish the conformance suite, keep a
-   forwarding `internal/storetest` until the nested modules move on**
-   - Pro: implementers get the suite; nothing breaks; the shim is tiny.
-   - Con: two import paths for the suite during the transition.
+1. **Keep the existing surface and publish the conformance suite; the nested
+   modules import it from the root release that contains it**
+   - Pro: implementers get the suite; nothing breaks; one import path.
+   - Con: the suite becomes public API that must stay stable.
 2. **Keep the suite internal**
    - Pro: no new API to keep stable.
    - Con: third-party backends cannot prove conformance; downstream copies
      drift.
-3. **Move the suite and update the nested modules now**
-   - Pro: one import path.
-   - Con: the nested modules require root `v0.3.0`, which has no public
-     `storetest`; their standalone builds would break until a root release
-     and a version bump, which is outside this change.
+3. **Publish the suite and keep a forwarding `internal/storetest`**
+   - Pro: nested modules could keep requiring an older root release.
+   - Con: two import paths for the suite; a shim to delete later.
 4. **Unexport helpers the backends use (`ValidateBucket`, `ValidateKey`,
    `PutOptions.ValidateSize`, `Object.Digest`)**
    - Pro: smaller root surface.
@@ -67,16 +64,13 @@ We will use option 1. The public API is every exported identifier outside
 | `backend/s3`, `backend/gcs`, `backend/azure`, `backend/sftp`, `backend/http` | provider adapters (nested modules) |
 | `backend/gcs/gcstest`, `backend/azure/azuretest`, `backend/sftp/sftptest` | in-process fakes used by downstream tests (ADR-0008) |
 
-Internal:
-
-| Package | Why |
-|---|---|
-| `internal/storetest` | forwards to `storetest` for the nested modules until they require a root release that contains it; then deleted |
+Internal: none. There is no `internal/` package; implementation details are
+unexported.
 
 Changes made for the release:
 
 - Moved `internal/storetest` to the public `storetest` (`Run`, `Factory`,
-  `StreamingSize`) and added the forwarding `internal/storetest`.
+  `StreamingSize`); the nested modules' conformance tests import it.
 - No exported identifier was unexported or removed: the review found no
   exported implementation detail. Encoders, lock protocols, error mapping,
   staging and the S3 test handler were already unexported or in test files.
@@ -95,15 +89,13 @@ Changes made for the release:
 - No consumer needs a code change.
 
 ### Negative
-- Two import paths for the suite until the nested modules require the next
-  root release.
+- `storetest` is public API: changing it follows the same compatibility
+  rules as the contract.
 
 ### Follow-ups
-- After the next root release, raise the nested modules' root requirement,
-  switch their conformance tests to `storetest`, delete
-  `internal/storetest` (ADR-0003 release order).
+- None.
 
 ## Links
 
-- `storetest/`, `internal/storetest/`
-- CHANGELOG `[Unreleased]`
+- `storetest/`
+- CHANGELOG `[0.1.0]`

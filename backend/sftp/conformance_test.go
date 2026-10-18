@@ -5,7 +5,7 @@ import (
 
 	objectstore "github.com/justusschock/object-storage"
 	"github.com/justusschock/object-storage/backend/sftp/sftptest"
-	"github.com/justusschock/object-storage/internal/storetest"
+	"github.com/justusschock/object-storage/storetest"
 )
 
 // TestConformance runs the complete store contract, including every optional

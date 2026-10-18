@@ -5,7 +5,7 @@ import (
 
 	objectstore "github.com/justusschock/object-storage"
 	"github.com/justusschock/object-storage/backend/azure/azuretest"
-	"github.com/justusschock/object-storage/internal/storetest"
+	"github.com/justusschock/object-storage/storetest"
 )
 
 // withoutPresign hides the Presigner capability from storetest. The

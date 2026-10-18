@@ -10,7 +10,7 @@ import (
 
 	objectstore "github.com/justusschock/object-storage"
 	"github.com/justusschock/object-storage/backend/gcs/gcstest"
-	"github.com/justusschock/object-storage/internal/storetest"
+	"github.com/justusschock/object-storage/storetest"
 )
 
 // TestConformance runs the complete store contract, including every optional

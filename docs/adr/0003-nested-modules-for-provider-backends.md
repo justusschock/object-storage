@@ -67,7 +67,7 @@ provider or SSH SDK.
 
 **Tags.** The root module is tagged `vX.Y.Z`; a nested module is tagged with
 its directory as prefix, `backend/<name>/vX.Y.Z` (for example
-`backend/s3/v0.4.0`), as the Go module system requires. Nested modules version
+`backend/s3/v0.1.0`), as the Go module system requires. Nested modules version
 independently of the root and of each other.
 
 **Release order.**
@@ -82,6 +82,11 @@ CI tests pull requests with a temporary workspace over all six modules, so
 backends are tested against the checked-out root. On release tags CI tests
 every module without a workspace, exactly as consumers resolve it.
 
+The first public release tagged the root and every nested module `v0.1.0` on
+one commit. The nested modules require root `v0.1.0`; their `go.sum` entries
+for it were computed from that commit before it was pushed, which is valid
+because a module zip never contains nested modules.
+
 ## Consequences
 
 ### Positive
@@ -91,13 +96,10 @@ every module without a workspace, exactly as consumers resolve it.
 ### Negative
 - A change that spans the root and a backend needs two releases in order.
 - Between steps 1 and 2 a backend may lag the root; until then it can only
-  use API of the root version it requires. The transitional
-  `internal/storetest` package (ADR-0009) exists for exactly this reason.
+  use API of the root version it requires.
 
 ### Follow-ups
-- When the nested modules next require a new root release, switch their
-  conformance tests to the public `storetest` package and delete
-  `internal/storetest`.
+- None.
 
 ## Links
 

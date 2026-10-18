@@ -62,8 +62,6 @@ The repository holds six Go modules (ADR-0003). The root module:
 - `storetest/`: conformance suite every implementation must pass.
 - `cas/`, `pack/`, `multipart/`, `lease/`, `handoff/`: storage layers that
   depend only on the contract.
-- `internal/storetest/`: forwards to `storetest` for the nested modules until
-  they require a root release that contains it (ADR-0009); then deleted.
 
 Nested modules, each with its own `go.mod` requiring a released root
 version:
